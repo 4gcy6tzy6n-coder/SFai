@@ -33,19 +33,25 @@ use crate::core::model_adapter::ModelAdapter;
 use crate::error::SfaiError;
 use crate::fixtures::{get_fixture, FIXTURE_NAMES};
 use crate::integrations::providers::openai_compat::OpenAICompatibleAdapter;
+use crate::integrations::providers::profiles::{
+    builtin_profiles, resolve_provider, ProviderProfile,
+};
 
 pub struct ServerState {
     pub app: Arc<App>,
     pub token: Option<String>,
+    /// Default provider used for runs that do not name one explicitly.
+    pub provider: Option<ProviderProfile>,
     pub running: Mutex<HashSet<String>>,
     pub cancels: Mutex<HashMap<String, Arc<AtomicBool>>>,
 }
 
 impl ServerState {
-    pub fn new(app: Arc<App>, token: Option<String>) -> Self {
+    pub fn new(app: Arc<App>, token: Option<String>, provider: Option<ProviderProfile>) -> Self {
         Self {
             app,
             token,
+            provider,
             running: Mutex::new(HashSet::new()),
             cancels: Mutex::new(HashMap::new()),
         }
@@ -58,6 +64,7 @@ pub fn router(state: Arc<ServerState>) -> Router {
         .route("/api/health", get(health))
         .route("/api/capabilities", get(list_capabilities))
         .route("/api/skills", get(list_skills))
+        .route("/api/providers", get(list_providers))
         .route("/api/tasks", get(list_tasks).post(create_task))
         .route("/api/tasks/:task_id", get(get_task))
         .route("/api/tasks/:task_id/events", get(get_events))
@@ -83,8 +90,9 @@ pub async fn serve(
     app: Arc<App>,
     addr: std::net::SocketAddr,
     token: Option<String>,
+    provider: Option<ProviderProfile>,
 ) -> std::io::Result<()> {
-    let state = Arc::new(ServerState::new(app, token));
+    let state = Arc::new(ServerState::new(app, token, provider));
     let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, router(state)).await
 }
@@ -170,6 +178,14 @@ async fn list_capabilities(State(state): State<Arc<ServerState>>) -> Json<Value>
 
 async fn list_skills(State(state): State<Arc<ServerState>>) -> Json<Value> {
     Json(json!({"skills": state.app.skills.discover("", 100)}))
+}
+
+async fn list_providers(State(state): State<Arc<ServerState>>) -> Json<Value> {
+    let providers: Vec<Value> = builtin_profiles().iter().map(|p| p.summary()).collect();
+    Json(json!({
+        "providers": providers,
+        "default": state.provider.as_ref().map(|p| p.name.clone()),
+    }))
 }
 
 #[derive(Deserialize)]
@@ -276,6 +292,39 @@ struct RunTaskReq {
     fixture: Option<String>,
     #[serde(default)]
     max_steps: Option<usize>,
+    /// Override the default provider for this run.
+    #[serde(default)]
+    provider: Option<String>,
+    /// Override the model name for this run.
+    #[serde(default)]
+    model: Option<String>,
+}
+
+fn provider_for_request(
+    state: &ServerState,
+    req: &RunTaskReq,
+) -> Result<Option<ProviderProfile>, ApiError> {
+    if req.fixture.is_some() {
+        return Ok(None);
+    }
+    match (&req.provider, &req.model) {
+        (Some(name), model) => Ok(Some(
+            resolve_provider(name)?.with_overrides(model.as_deref(), None, None),
+        )),
+        (None, Some(model)) => {
+            let base = state.provider.clone().ok_or_else(|| {
+                ApiError::bad_request(
+                    "model override requires a configured default provider (start with --provider)",
+                )
+            })?;
+            Ok(Some(base.with_overrides(Some(model), None, None)))
+        }
+        (None, None) => state.provider.clone().map(Some).ok_or_else(|| {
+            ApiError::bad_request(
+                "no provider configured: start `sfai serve --provider deepseek` or pass provider/model in the request body",
+            )
+        }),
+    }
 }
 
 async fn run_task(
@@ -304,6 +353,7 @@ async fn run_task(
     let app = state.app.clone();
     let tid = task_id.clone();
     let fixture = req.fixture.clone();
+    let profile = provider_for_request(&state, &req)?;
     let max_steps = req.max_steps.unwrap_or(50);
 
     let joined = tokio::task::spawn_blocking(move || -> Result<TaskRunResult, String> {
@@ -312,7 +362,14 @@ async fn run_task(
                 let spec = get_fixture(&name).map_err(|e| e.to_string())?;
                 (spec.build_model)()
             }
-            None => Box::new(OpenAICompatibleAdapter::from_env()),
+            None => {
+                let profile = profile.ok_or_else(|| {
+                    "no provider configured: pass provider/model in the request body".to_string()
+                })?;
+                let adapter =
+                    OpenAICompatibleAdapter::from_profile(&profile).map_err(|e| e.to_string())?;
+                Box::new(adapter)
+            }
         };
         let mut observer = NoopObserver;
         app.run_observed_with_cancel(model.as_mut(), &tid, max_steps, &mut observer, Some(cancel))

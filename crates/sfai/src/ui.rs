@@ -472,48 +472,83 @@ pub struct DashboardInfo<'a> {
     pub session_cost_usd: f64,
 }
 
+pub fn detect_terminal_size() -> (usize, usize) {
+    let cols = std::env::var("COLUMNS")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok());
+    let rows = std::env::var("LINES")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok());
+    if let (Some(c), Some(r)) = (cols, rows) {
+        return (c.clamp(72, 220), r.clamp(18, 80));
+    }
+    use std::io::IsTerminal;
+    if std::io::stdin().is_terminal() {
+        if let Ok(out) = std::process::Command::new("stty")
+            .arg("size")
+            .stdin(std::process::Stdio::inherit())
+            .output()
+        {
+            if out.status.success() {
+                let s = String::from_utf8_lossy(&out.stdout);
+                let mut parts = s.split_whitespace();
+                if let (Some(r_str), Some(c_str)) = (parts.next(), parts.next()) {
+                    if let (Ok(r), Ok(c)) = (r_str.parse::<usize>(), c_str.parse::<usize>()) {
+                        return (c.clamp(72, 220), r.clamp(18, 80));
+                    }
+                }
+            }
+        }
+    }
+    (100, 26)
+}
+
+/// Renders the Claude Code top-left pixel mascot + 3-line borderless dashboard
+/// header (matching the Claude Code frontend screenshot).
 pub fn render_top_dashboard(info: &DashboardInfo<'_>, theme: &Theme) -> String {
-    let title = format!(
-        "{} {}",
-        theme.accent("✻ sfai Dashboard"),
-        theme.dim("· System for future ai · interactive session")
-    );
+    let m1 = theme.accent(" ▐▛███▜▌ ");
+    let m2 = theme.accent("▝▜█████▛▘");
+    let m3 = theme.accent("  ▘▘ ▝▝  ");
+
     let task_badge = match (info.active_task, info.active_status) {
         (Some(tid), Some(st)) => {
             let short = if tid.len() > 14 { &tid[..14] } else { tid };
-            format!("{} ({})", theme.cyan(short), theme.status_badge(st))
+            format!("{short} ({})", theme.status_badge(st))
         }
         (Some(tid), None) => theme.cyan(tid),
         _ => theme.dim("none"),
     };
-    let model_short = truncate_plain(info.model_label, 24);
-    let row1 = format!(
-        "{} {}   {} {}   {} {}",
-        theme.dim("Model:"),
-        theme.cyan(&model_short),
-        theme.dim("Permissions:"),
-        info.permission_mode.badge(theme),
-        theme.dim("Context:"),
-        theme.magenta(&format!(
-            "{} ref(s) · {} pinned",
-            info.active_refs_count, info.pinned_constraints_count
+
+    let line1 = format!(
+        "{m1}  {} {} {}",
+        theme.bold("sfai Code"),
+        theme.dim("v0.1.0 · interactive session"),
+        theme.dim("· ✻ sfai Dashboard")
+    );
+    let line2 = format!(
+        "{m2}  {}",
+        theme.dim(&format!(
+            "{} with self-routing · API Usage Billing: ${:.4} ({}→{} tok) · Context: {} ref(s) · {} pinned · Wiki: {}n/{}e",
+            truncate_plain(info.model_label, 26),
+            info.session_cost_usd,
+            info.total_input_tokens,
+            info.total_output_tokens,
+            info.active_refs_count,
+            info.pinned_constraints_count,
+            info.wiki_nodes,
+            info.wiki_edges
         ))
     );
-    let row2 = format!(
-        "{} {}   {} {}   {} {}   {} {}",
-        theme.dim("Task:"),
-        task_badge,
-        theme.dim("Wiki:"),
-        theme.cyan(&format!("{}n/{}e", info.wiki_nodes, info.wiki_edges)),
+    let line3 = format!(
+        "{m3}  {} · {} {} · {} {} · {} {task_badge}",
+        theme.dim(info.storage),
+        theme.dim("Mode:"),
+        info.permission_mode.badge(theme),
         theme.dim("Files:"),
         theme.yellow_bold(&format!("{} modified", info.modified_files_count)),
-        theme.dim("Cost:"),
-        theme.green(&format!(
-            "${:.4} ({}→{} tok)",
-            info.session_cost_usd, info.total_input_tokens, info.total_output_tokens
-        ))
+        theme.dim("Task:")
     );
-    render_box(&title, &[row1, row2], 76, theme)
+    format!("{line1}\n{line2}\n{line3}")
 }
 
 // ---- File Modification & Line-by-Line Diff Engine ----
@@ -924,83 +959,79 @@ pub fn render_chat_history(turns: &[ChatTurn], theme: &Theme) -> String {
 }
 
 pub fn render_chat_composer_status_bar(status: &ChatComposerStatus<'_>, theme: &Theme) -> String {
-    let task_str = status
-        .active_task
-        .map(|t| if t.len() > 14 { &t[..14] } else { t })
-        .unwrap_or("none");
-    let model_short = truncate_plain(status.model_label, 20);
+    let mode_text = match status.perm_mode {
+        PermissionMode::Deny => "deny-all mode on",
+        PermissionMode::Ask => "manual approval mode on",
+        PermissionMode::Auto => "auto-approve mode on",
+    };
     format!(
-        "  {} {} · {} {} · {} {} · {} {} · {} {} · {}",
-        theme.accent("⏵⏵"),
-        status.perm_mode.badge(theme),
+        "  {} {} · {} · {} {} · {}",
+        theme.accent("⏸"),
+        theme.dim(mode_text),
+        theme.dim("? for shortcuts"),
         theme.dim("files:"),
         theme.yellow_bold(&format!("{} modified", status.modified_files_count)),
-        theme.dim("model:"),
-        theme.cyan(&model_short),
-        theme.dim("task:"),
-        theme.cyan(task_str),
-        theme.dim("cost:"),
-        theme.green(&format!("${:.6}", status.session_cost_usd)),
-        theme.dim("/files · /diff · /dashboard · /help")
+        theme.dim("⏵⏵ /files · /diff · /wiki · /status · /help")
     )
 }
 
-/// Renders the Claude Code bottom AI chat input dialog box and reads one line
-/// of user input.
-///
-/// - In an interactive color TTY (`stdin` and `stdout` are terminals and
-///   `theme.color` is true), draws the complete 4-line framed input box +
-///   status bar first, then moves the cursor inside the box (`│ ❯ sfai> `) so
-///   the user types directly inside the dialog box at the bottom of the screen.
-/// - In piped / non-TTY or `--no-color` mode, prints the top frame + prompt,
-///   reads the line, and closes the bottom frame + status bar cleanly without
-///   emitting raw cursor-movement escape codes.
-pub fn read_chat_input_box(
+/// Renders the full 3-zone Claude Code frontend layout:
+/// - **Top Zone**: Mascot + 3-line Dashboard Header
+/// - **Middle Zone**: Modified files / diffs, conversation & `/command` output
+///   (padded to fill the viewport height in TTY mode, with a right-aligned green
+///   status notification on the bottom-right just above the separator line)
+/// - **Bottom Zone**: Full-width `───` rule, `❯ ` input prompt with placeholder
+///   hint, full-width `───` rule, and `⏸ <mode> mode on · ? for shortcuts` bar.
+pub fn read_claude_code_viewport_input(
+    dashboard: &DashboardInfo<'_>,
+    middle_content: &str,
+    notification: &str,
     status: &ChatComposerStatus<'_>,
     theme: &Theme,
 ) -> std::result::Result<Option<String>, String> {
     use std::io::IsTerminal;
-    let inner_width = 74usize;
-    let title = format!(
-        "{} {}",
-        theme.accent("✻ Chat with sfai AI"),
-        theme.dim("(type message to talk, or /help for commands)")
-    );
-    let title_w = display_width(&title);
-    let top_dashes = (inner_width + 2).saturating_sub(title_w + 3);
-    let top_border = format!(
-        "{} {} {}",
-        theme.dim("╭─"),
-        title,
-        theme.dim(&format!("{}╮", "─".repeat(top_dashes)))
-    );
-    let bottom_border = theme.dim(&format!("╰{}╯", "─".repeat(inner_width + 2)));
-    let status_bar = render_chat_composer_status_bar(status, theme);
-
     let is_tty = std::io::stdin().is_terminal() && std::io::stdout().is_terminal() && theme.color;
+    let (cols, rows) = detect_terminal_size();
+    let rule = theme.dim(&"─".repeat(cols));
+    let status_bar = render_chat_composer_status_bar(status, theme);
+    let notif_styled = theme.green(&format!("✓ {notification}"));
+    let notif_w = display_width(&notif_styled);
+    let notif_pad = cols.saturating_sub(notif_w + 2);
+    let notif_line = format!("{}{}", " ".repeat(notif_pad), notif_styled);
 
     if is_tty {
-        let prompt_prefix = format!(
-            "{} {} {}",
-            theme.dim("│"),
-            theme.accent("❯"),
-            theme.accent("sfai>")
-        );
-        let prefix_w = display_width(&prompt_prefix);
-        let blank_pad = (inner_width + 1).saturating_sub(prefix_w);
-        let middle_line = format!(
-            "{}{}{}",
-            prompt_prefix,
-            " ".repeat(blank_pad),
-            theme.dim("│")
-        );
-        // Print the full 4-line dialog box + status bar at the bottom, then
-        // position the cursor inside the input line right after `│ ❯ sfai> `.
-        println!("{top_border}");
-        println!("{middle_line}");
-        println!("{bottom_border}");
+        // Clear viewport and draw Top Zone + Middle Zone + Bottom Zone
+        print!("\x1b[2J\x1b[H");
+        println!("{}\n", render_top_dashboard(dashboard, theme));
+
+        // Available rows for middle content: total rows - 4 (top) - 5 (notif + bottom bar)
+        let middle_budget = rows.saturating_sub(9).max(4);
+        let mid_lines: Vec<&str> = middle_content
+            .lines()
+            .filter(|l| !l.is_empty() || !middle_content.trim().is_empty())
+            .collect();
+        let start = mid_lines.len().saturating_sub(middle_budget);
+        let visible = &mid_lines[start..];
+        for l in visible {
+            println!("{l}");
+        }
+        for _ in visible.len()..middle_budget {
+            println!();
+        }
+
+        // Right-aligned green notification line right above the top rule
+        println!("{notif_line}");
+        // Bottom input bar: rule -> `❯ Try "..."` -> rule -> status bar
+        println!("{rule}");
+        let placeholder =
+            theme.dim("Try \"搜索并写一份研究报告\" or \"修改 report.md\" (or /help)");
+        let ph_w = display_width(&placeholder);
+        let ph_pad = cols.saturating_sub(ph_w + 12).max(4);
+        println!("{} {}{}", theme.bold("❯"), " ".repeat(ph_pad), placeholder);
+        println!("{rule}");
         print!("{status_bar}");
-        print!("\r\x1b[2A\x1b[{}C", prefix_w + 1);
+        // Position cursor on the `❯ ` line at column 3
+        print!("\r\x1b[2A\x1b[2C");
         std::io::stdout().flush().map_err(|e| e.to_string())?;
 
         let mut line = String::new();
@@ -1008,7 +1039,6 @@ pub fn read_chat_input_box(
             .lock()
             .read_line(&mut line)
             .map_err(|e| e.to_string())?;
-        // Move cursor below the bottom border and status bar before next output.
         println!("\x1b[1B\r");
         std::io::stdout().flush().map_err(|e| e.to_string())?;
         if read == 0 {
@@ -1016,15 +1046,16 @@ pub fn read_chat_input_box(
         }
         Ok(Some(line))
     } else {
-        let prompt_prefix = format!(
-            "{} {} {} ",
-            theme.dim("│"),
-            theme.accent("❯"),
-            theme.accent("sfai>")
+        // Non-TTY / piped mode: render the same 3-zone structure cleanly for
+        // deterministic logs and integration tests.
+        println!(
+            "{} {}",
+            theme.dim("──"),
+            theme.accent("✻ Chat with sfai AI")
         );
-        let prefix_w = display_width(&prompt_prefix);
-        println!("{top_border}");
-        print!("{prompt_prefix}");
+        println!("{notif_line}");
+        println!("{rule}");
+        print!("{} {} ", theme.dim("│"), theme.accent("❯ sfai>"));
         std::io::stdout().flush().map_err(|e| e.to_string())?;
 
         let mut line = String::new();
@@ -1033,25 +1064,50 @@ pub fn read_chat_input_box(
             .read_line(&mut line)
             .map_err(|e| e.to_string())?;
         if read == 0 {
-            let pad = (inner_width + 3).saturating_sub(prefix_w);
-            println!("{}{}", " ".repeat(pad), theme.dim("│"));
-            println!("{bottom_border}");
+            println!();
+            println!("{rule}");
             println!("{status_bar}");
             return Ok(None);
         }
         let trimmed = line.trim_end_matches(&['\r', '\n'][..]);
-        let shown = truncate_plain(trimmed, (inner_width + 2).saturating_sub(prefix_w));
-        let shown_w = display_width(&shown);
-        let pad = (inner_width + 3).saturating_sub(prefix_w + shown_w);
-        println!(
-            "{}{}{}",
-            theme.bold(&shown),
-            " ".repeat(pad),
-            theme.dim("│")
-        );
-        println!("{bottom_border}");
+        println!("{}", theme.bold(trimmed));
+        println!("{rule}");
         println!("{status_bar}");
         Ok(Some(line))
+    }
+}
+
+/// Writer that tees output to both stdout and an in-memory buffer so the
+/// Middle Zone retains the latest conversation turn and modified file diffs.
+pub struct TeeWriter {
+    pub buf: Vec<u8>,
+}
+
+impl TeeWriter {
+    pub fn new() -> Self {
+        Self { buf: Vec::new() }
+    }
+
+    pub fn into_string(self) -> String {
+        String::from_utf8_lossy(&self.buf).into_owned()
+    }
+}
+
+impl Default for TeeWriter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl Write for TeeWriter {
+    fn write(&mut self, data: &[u8]) -> std::io::Result<usize> {
+        self.buf.extend_from_slice(data);
+        std::io::stdout().write_all(data)?;
+        Ok(data.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        std::io::stdout().flush()
     }
 }
 

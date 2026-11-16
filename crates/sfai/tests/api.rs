@@ -12,7 +12,7 @@ use sfai::app::{build_app, App};
 use sfai::server::{router, ServerState};
 
 fn state(app: App, token: Option<String>) -> Arc<ServerState> {
-    Arc::new(ServerState::new(Arc::new(app), token))
+    Arc::new(ServerState::new(Arc::new(app), token, None))
 }
 
 async fn call(router: &axum::Router, request: Request<Body>) -> (StatusCode, Value) {
@@ -232,4 +232,54 @@ async fn run_endpoint_executes_fixture_on_existing_task() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(body["state"]["status"], "completed");
     assert_eq!(body["task"]["constraints"][0], "be brief");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn providers_endpoint_lists_builtin_profiles() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let app = build_app(dir.path()).expect("app");
+    let api = router(state(app, None));
+
+    let (status, body) = call(&api, get("/api/providers")).await;
+    assert_eq!(status, StatusCode::OK);
+    let names: Vec<&str> = body["providers"]
+        .as_array()
+        .expect("providers")
+        .iter()
+        .map(|p| p["name"].as_str().unwrap_or(""))
+        .collect();
+    assert_eq!(names, vec!["deepseek", "qwen", "mimo", "custom"]);
+    assert!(body["default"].is_null());
+    assert_eq!(body["providers"][0]["model"], "deepseek-chat");
+    assert_eq!(body["providers"][0]["api_key_envs"][0], "DEEPSEEK_API_KEY");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn run_without_provider_is_rejected_clearly() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let app = build_app(dir.path()).expect("app");
+    let api = router(state(app, None));
+
+    let (_, body) = call(
+        &api,
+        post_json(
+            "/api/tasks",
+            json!({"goal": "hello", "acceptance_rules": []}),
+        ),
+    )
+    .await;
+    let task_id = body["task"]["task_id"].as_str().unwrap().to_string();
+    let (status, body) = call(
+        &api,
+        post_json(&format!("/api/tasks/{task_id}/run"), json!({})),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(
+        body["error"]
+            .as_str()
+            .unwrap_or("")
+            .contains("no provider configured"),
+        "unexpected error: {body}"
+    );
 }

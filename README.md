@@ -92,6 +92,20 @@ Duplicate runs of the same task are rejected with `409`; the kernel checks the
 cancel flag each step, so cancelled tasks end in `cancelled` rather than
 silently finishing.
 
+## Real model providers (DeepSeek / Qwen / MiMo)
+
+```bash
+export DEEPSEEK_API_KEY=sk-...
+cargo run -- run --goal "research X and write a cited report" --provider deepseek --model deepseek-chat
+cargo run -- serve --provider deepseek          # API defaults to DeepSeek
+cargo run -- bench --provider deepseek --model deepseek-chat \
+  --suite dataset --ablation none --size 3 --out evals/reports/v1-deepseek.json
+```
+
+Profiles, env vars, pricing overrides and troubleshooting:
+[`docs/providers.md`](docs/providers.md). Custom/self-hosted endpoints use
+`SFAI_MODEL_BASE_URL` + `SFAI_MODEL_NAME` + `SFAI_MODEL_API_KEY`.
+
 ## Agent framework benchmark
 
 `sfai bench` measures the framework end-to-end (kernel, tools, stores,

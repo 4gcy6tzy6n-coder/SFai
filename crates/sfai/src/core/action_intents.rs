@@ -34,6 +34,32 @@ pub fn intent(
     }
 }
 
+/// Single tool exposed to real providers: exactly one action intent per step.
+pub fn action_tool_schema() -> Value {
+    json!({
+        "type": "function",
+        "function": {
+            "name": "submit_action",
+            "description": "Submit exactly one action intent for the next step.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "kind": {
+                        "type": "string",
+                        "enum": ["discover", "retrieve", "activate", "execute", "verify", "respond", "ask_user", "pause", "finish"]
+                    },
+                    "task_id": {"type": "string"},
+                    "reason_code": {"type": "string"},
+                    "payload": {"type": "object"},
+                    "expected_refs": {"type": "array", "items": {"type": "string"}},
+                    "idempotency_key": {"type": "string"}
+                },
+                "required": ["kind", "task_id"]
+            }
+        }
+    })
+}
+
 /// Minimal, stable meta-interface exposed to the model (plan §3.2).
 pub fn minimal_tool_schema() -> Vec<Value> {
     vec![

@@ -59,6 +59,7 @@ pub mod integrations {
     pub mod providers {
         pub mod fake;
         pub mod openai_compat;
+        pub mod profiles;
     }
 }
 

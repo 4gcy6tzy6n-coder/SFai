@@ -15,13 +15,14 @@ use sfai::integrations::providers::fake::ConversationalDemoModel;
 use sfai::integrations::providers::openai_compat::OpenAICompatibleAdapter;
 use sfai::telemetry::replay::replay_trace;
 use sfai::ui::{
-    collect_modified_files, read_chat_input_box, render_box, render_capabilities_table,
+    collect_modified_files, read_claude_code_viewport_input, render_box, render_capabilities_table,
     render_chat_history, render_context_read, render_context_search, render_doctor_card,
     render_file_diff_box, render_files_summary_card, render_fixtures_table, render_help_card,
     render_inspect_timeline, render_run_summary, render_skill_detail, render_skills_list,
     render_task_status_card, render_tasks_table, render_top_dashboard, render_trace_card,
     render_user_chat_bubble, render_verification_card, render_wiki_view, ChatComposerStatus,
-    ChatTurn, ClaudeStepObserver, CliApprovalProvider, DashboardInfo, PermissionMode, Theme,
+    ChatTurn, ClaudeStepObserver, CliApprovalProvider, DashboardInfo, PermissionMode, TeeWriter,
+    Theme,
 };
 
 #[derive(Parser)]
@@ -45,6 +46,18 @@ struct Cli {
     /// Runtime approval policy for consequential actions: deny | ask | auto
     #[arg(long, default_value = "deny", global = true)]
     permissions: String,
+    /// Model provider: deepseek | qwen | mimo | custom (custom uses SFAI_MODEL_*)
+    #[arg(long, global = true)]
+    provider: Option<String>,
+    /// Override the provider's model name
+    #[arg(long, global = true)]
+    model: Option<String>,
+    /// Override input price (USD per 1M tokens)
+    #[arg(long, global = true)]
+    price_in: Option<f64>,
+    /// Override output price (USD per 1M tokens)
+    #[arg(long, global = true)]
+    price_out: Option<f64>,
     #[command(subcommand)]
     cmd: Option<Cmd>,
 }
@@ -554,7 +567,22 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
                     ));
                 }
             }
-            let report = sfai::benchmark::run_benchmark(&suites, &ablations, size);
+            let profile = match sfai::integrations::providers::profiles::resolve_for_cli(
+                cli.provider.as_deref(),
+                cli.model.as_deref(),
+                cli.price_in,
+                cli.price_out,
+            ) {
+                Ok(p) => Some(p),
+                Err(_) if cli.provider.is_none() => None,
+                Err(e) => return Err(e.to_string()),
+            };
+            let report = sfai::benchmark::run_benchmark_with_provider(
+                &suites,
+                &ablations,
+                size,
+                profile.as_ref(),
+            );
             println!("{}", report.render_markdown());
             let stamp = report.generated_at.replace([':', '.'], "-");
             let path = out.unwrap_or_else(|| {
@@ -595,6 +623,19 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
                 .parse()
                 .map_err(|e| format!("invalid bind address {bind}:{port}: {e}"))?;
             let app = Arc::new(app);
+            let profile = match sfai::integrations::providers::profiles::resolve_for_cli(
+                cli.provider.as_deref(),
+                cli.model.as_deref(),
+                cli.price_in,
+                cli.price_out,
+            ) {
+                Ok(p) => Some(p),
+                Err(_) if cli.provider.is_none() => None,
+                Err(e) => return Err(e.to_string()),
+            };
+            if let Some(profile) = &profile {
+                eprintln!("default provider: {} ({})", profile.name, profile.model);
+            }
             eprintln!("sfai api listening on http://{addr}");
             eprintln!("  GET  /api/health | /api/tasks | /api/tasks/:id | /api/tasks/:id/stream");
             eprintln!("  POST /api/tasks | /api/tasks/:id/run | /api/demo/:fixture | /api/tasks/:id/cancel");
@@ -606,6 +647,7 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
                     app,
                     addr,
                     std::env::var("SFAI_API_TOKEN").ok(),
+                    profile,
                 ))
                 .map_err(|e| e.to_string())?;
             Ok(0)
@@ -657,7 +699,7 @@ impl SessionStats {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn print_dashboard(
+fn build_dashboard_string(
     app: &App,
     approvals: &CliApprovalProvider,
     last_task: Option<&str>,
@@ -666,7 +708,7 @@ fn print_dashboard(
     turns_count: usize,
     stats: &SessionStats,
     theme: &Theme,
-) {
+) -> String {
     let model_label = model_mode.label();
     let (active_status, active_refs_count, pinned_count, wiki_nodes, wiki_edges) =
         if let Some(tid) = last_task {
@@ -693,8 +735,9 @@ fn print_dashboard(
             (None, 0, session_constraints_len, 0, 0)
         };
     let modified_files_count = collect_modified_files(app, None).len();
+    let storage_str = app.storage_root.display().to_string();
     let info = DashboardInfo {
-        storage: &app.storage_root.display().to_string(),
+        storage: &storage_str,
         model_label: &model_label,
         permission_mode: approvals.mode(),
         active_task: last_task,
@@ -709,7 +752,33 @@ fn print_dashboard(
         total_output_tokens: stats.total_output_tokens,
         session_cost_usd: stats.total_cost_usd,
     };
-    println!("{}\n", render_top_dashboard(&info, theme));
+    render_top_dashboard(&info, theme)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn print_dashboard(
+    app: &App,
+    approvals: &CliApprovalProvider,
+    last_task: Option<&str>,
+    model_mode: ChatModelMode,
+    session_constraints_len: usize,
+    turns_count: usize,
+    stats: &SessionStats,
+    theme: &Theme,
+) {
+    println!(
+        "{}\n",
+        build_dashboard_string(
+            app,
+            approvals,
+            last_task,
+            model_mode,
+            session_constraints_len,
+            turns_count,
+            stats,
+            theme
+        )
+    );
 }
 
 fn resolve_target_task(arg: &str, last_task: Option<&str>, app: &App) -> Result<String, String> {
@@ -764,6 +833,9 @@ fn interactive(
     approvals: &Arc<CliApprovalProvider>,
     theme: Theme,
 ) -> Result<u8, String> {
+    use std::io::IsTerminal;
+    let is_tty = std::io::stdin().is_terminal() && std::io::stdout().is_terminal() && theme.color;
+
     let mut last_task: Option<String> = app
         .task_store
         .list(1)
@@ -776,17 +848,21 @@ fn interactive(
     let mut model_mode = ChatModelMode::Auto;
     let mut file_snapshots: std::collections::BTreeMap<String, (u32, String)> =
         std::collections::BTreeMap::new();
+    let mut middle_content = String::new();
+    let mut notification = "Ready · sfai Code v0.1.0".to_string();
 
-    print_dashboard(
-        app,
-        approvals,
-        last_task.as_deref(),
-        model_mode,
-        session_constraints.len(),
-        chat_history.len(),
-        &stats,
-        &theme,
-    );
+    if !is_tty {
+        print_dashboard(
+            app,
+            approvals,
+            last_task.as_deref(),
+            model_mode,
+            session_constraints.len(),
+            chat_history.len(),
+            &stats,
+            &theme,
+        );
+    }
 
     loop {
         let model_label = model_mode.label();
@@ -800,7 +876,56 @@ fn interactive(
             turns_count: chat_history.len(),
             session_cost_usd: stats.total_cost_usd,
         };
-        let Some(line) = read_chat_input_box(&composer_status, &theme)? else {
+        let (active_status, active_refs_count, pinned_count, wiki_nodes, wiki_edges) =
+            if let Some(tid) = last_task.as_deref() {
+                let st = app.task_store.state(tid).ok();
+                let status = st.as_ref().map(|s| s.status);
+                let pinned = st
+                    .as_ref()
+                    .map(|s| s.pinned_constraints.len())
+                    .unwrap_or(session_constraints.len());
+                let sources = app
+                    .objects
+                    .source_refs_for_task(tid)
+                    .map(|v| v.len())
+                    .unwrap_or(0);
+                let arts = app
+                    .objects
+                    .artifact_refs_for_task(tid)
+                    .map(|v| v.len())
+                    .unwrap_or(0);
+                let wn = app.wiki.nodes_for(tid).map(|v| v.len()).unwrap_or(0);
+                let we = app.wiki.edges_for(tid).map(|v| v.len()).unwrap_or(0);
+                (status, sources + arts, pinned, wn, we)
+            } else {
+                (None, 0, session_constraints.len(), 0, 0)
+            };
+        let storage_str = app.storage_root.display().to_string();
+        let dash_info = DashboardInfo {
+            storage: &storage_str,
+            model_label: &model_label,
+            permission_mode: approvals.mode(),
+            active_task: last_task.as_deref(),
+            active_status,
+            active_refs_count,
+            pinned_constraints_count: pinned_count,
+            wiki_nodes,
+            wiki_edges,
+            modified_files_count: modified_files.len(),
+            turns_count: chat_history.len(),
+            total_input_tokens: stats.total_input_tokens,
+            total_output_tokens: stats.total_output_tokens,
+            session_cost_usd: stats.total_cost_usd,
+        };
+
+        let Some(line) = read_claude_code_viewport_input(
+            &dash_info,
+            &middle_content,
+            &notification,
+            &composer_status,
+            &theme,
+        )?
+        else {
             break;
         };
         let input = line.trim();
@@ -811,7 +936,10 @@ fn interactive(
             break;
         }
         if matches!(input, "/help" | "?") {
-            println!("{}\n", render_help_card(&theme));
+            let card = render_help_card(&theme);
+            println!("{card}\n");
+            middle_content = card;
+            notification = "Showing /help shortcuts".into();
             continue;
         }
         if matches!(input, "/dashboard" | "/hud") {
@@ -825,13 +953,17 @@ fn interactive(
                 &stats,
                 &theme,
             );
+            notification = "Dashboard refreshed".into();
             continue;
         }
         if input == "/files" || input.starts_with("/files ") {
             let arg = input.strip_prefix("/files").unwrap_or("").trim();
             let scope = if arg.is_empty() { None } else { Some(arg) };
             let files = collect_modified_files(app, scope);
-            println!("{}\n", render_files_summary_card(&files, &theme));
+            let card = render_files_summary_card(&files, &theme);
+            println!("{card}\n");
+            middle_content = card;
+            notification = format!("{} modified file(s) in workspace", files.len());
             continue;
         }
         if input == "/diff" || input.starts_with("/diff ") {
@@ -843,20 +975,26 @@ fn interactive(
                 files.into_iter().filter(|f| f.path == arg).collect()
             };
             if filtered.is_empty() {
-                println!(
-                    "  {} no modified files matching {:?}\n",
-                    theme.dim("◌"),
-                    arg
-                );
+                let msg = format!("  {} no modified files matching {:?}", theme.dim("◌"), arg);
+                println!("{msg}\n");
+                middle_content = msg;
             } else {
+                let mut blocks = Vec::new();
                 for change in &filtered {
-                    println!("{}\n", render_file_diff_box(change, 80, 0, &theme));
+                    let b = render_file_diff_box(change, 80, 0, &theme);
+                    println!("{b}\n");
+                    blocks.push(b);
                 }
+                middle_content = blocks.join("\n");
+                notification = format!("Showing diff for {} file(s)", filtered.len());
             }
             continue;
         }
         if matches!(input, "/history" | "/chat") {
-            println!("{}\n", render_chat_history(&chat_history, &theme));
+            let card = render_chat_history(&chat_history, &theme);
+            println!("{card}\n");
+            middle_content = card;
+            notification = format!("Showing {} conversation turn(s)", chat_history.len());
             continue;
         }
         if input == "/model" || input.starts_with("/model ") {
@@ -900,32 +1038,39 @@ fn interactive(
             continue;
         }
         if input == "/clear" {
-            if theme.color {
-                print!("\x1b[2J\x1b[H");
+            middle_content.clear();
+            notification = "Cleared middle viewport".into();
+            if !is_tty {
+                print_dashboard(
+                    app,
+                    approvals,
+                    last_task.as_deref(),
+                    model_mode,
+                    session_constraints.len(),
+                    chat_history.len(),
+                    &stats,
+                    &theme,
+                );
             }
-            print_dashboard(
-                app,
-                approvals,
-                last_task.as_deref(),
-                model_mode,
-                session_constraints.len(),
-                chat_history.len(),
-                &stats,
-                &theme,
-            );
             continue;
         }
         if input == "/fixtures" {
-            println!("{}\n", render_fixtures_table(&theme));
+            let card = render_fixtures_table(&theme);
+            println!("{card}\n");
+            middle_content = card;
             continue;
         }
         if input == "/doctor" {
-            println!("{}\n", render_doctor_card(app, approvals.mode(), &theme));
+            let card = render_doctor_card(app, approvals.mode(), &theme);
+            println!("{card}\n");
+            middle_content = card;
             continue;
         }
         if input == "/capabilities" {
             let manifests = app.registry.discover("", 50, None);
-            println!("{}\n", render_capabilities_table(&manifests, &theme));
+            let card = render_capabilities_table(&manifests, &theme);
+            println!("{card}\n");
+            middle_content = card;
             continue;
         }
         if input == "/tasks" {
@@ -937,7 +1082,9 @@ fn interactive(
                             pairs.push((t, st));
                         }
                     }
-                    println!("{}\n", render_tasks_table(&pairs, &theme));
+                    let card = render_tasks_table(&pairs, &theme);
+                    println!("{card}\n");
+                    middle_content = card;
                 }
                 Err(err) => println!("  {} {}\n", theme.red_bold("✗ error:"), err),
             }
@@ -1075,18 +1222,22 @@ fn interactive(
                 &mut file_snapshots,
                 &theme,
             ) {
-                Ok(task_id) => {
+                Ok((task_id, mid, notif)) => {
                     last_task = Some(task_id);
-                    print_dashboard(
-                        app,
-                        approvals,
-                        last_task.as_deref(),
-                        model_mode,
-                        session_constraints.len(),
-                        chat_history.len(),
-                        &stats,
-                        &theme,
-                    );
+                    middle_content = mid;
+                    notification = notif;
+                    if !is_tty {
+                        print_dashboard(
+                            app,
+                            approvals,
+                            last_task.as_deref(),
+                            model_mode,
+                            session_constraints.len(),
+                            chat_history.len(),
+                            &stats,
+                            &theme,
+                        );
+                    }
                 }
                 Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
             }
@@ -1278,18 +1429,22 @@ fn interactive(
             &mut file_snapshots,
             &theme,
         ) {
-            Ok(task_id) => {
+            Ok((task_id, mid, notif)) => {
                 last_task = Some(task_id);
-                print_dashboard(
-                    app,
-                    approvals,
-                    last_task.as_deref(),
-                    model_mode,
-                    session_constraints.len(),
-                    chat_history.len(),
-                    &stats,
-                    &theme,
-                );
+                middle_content = mid;
+                notification = notif;
+                if !is_tty {
+                    print_dashboard(
+                        app,
+                        approvals,
+                        last_task.as_deref(),
+                        model_mode,
+                        session_constraints.len(),
+                        chat_history.len(),
+                        &stats,
+                        &theme,
+                    );
+                }
             }
             Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
         }
@@ -1305,13 +1460,12 @@ fn run_fixture_interactive(
     chat_history: &mut Vec<ChatTurn>,
     file_snapshots: &mut std::collections::BTreeMap<String, (u32, String)>,
     theme: &Theme,
-) -> Result<String, String> {
+) -> Result<(String, String, String), String> {
     let spec = get_fixture(name).map_err(|e| e.to_string())?;
     let turn_idx = chat_history.len() + 1;
-    println!(
-        "\n{}",
-        render_user_chat_bubble(turn_idx, &format!("/run {} — {}", name, spec.goal), theme)
-    );
+    let user_bubble =
+        render_user_chat_bubble(turn_idx, &format!("/run {} — {}", name, spec.goal), theme);
+    println!("\n{user_bubble}");
     let task = app
         .create_task(
             &spec.goal,
@@ -1325,7 +1479,7 @@ fn run_fixture_interactive(
     }
     let mut model = (spec.build_model)();
     let mut observer = ClaudeStepObserver::with_snapshots(
-        std::io::stdout(),
+        TeeWriter::new(),
         *theme,
         std::mem::take(file_snapshots),
     );
@@ -1333,6 +1487,7 @@ fn run_fixture_interactive(
         .run_observed(model.as_mut(), &task.task_id, 50, &mut observer)
         .map_err(|e| e.to_string())?;
     *file_snapshots = observer.take_snapshots();
+    let step_stream = observer.into_inner().into_string();
     stats.record(&result);
     let cost_usd = result
         .cost
@@ -1357,8 +1512,16 @@ fn run_fixture_interactive(
         tool_calls,
         cost_usd,
     });
-    print!("{}", render_run_summary(&result, theme));
-    Ok(task.task_id)
+    let summary_str = render_run_summary(&result, theme);
+    print!("{summary_str}");
+    let mid = format!("{user_bubble}\n{step_stream}{summary_str}");
+    let notif = format!(
+        "Task {} {} ({} steps · ${cost_usd:.4})",
+        task.task_id,
+        result.status.as_str(),
+        result.steps
+    );
+    Ok((task.task_id, mid, notif))
 }
 
 fn resume_interactive(
@@ -1400,9 +1563,10 @@ fn run_goal_interactive(
     chat_history: &mut Vec<ChatTurn>,
     file_snapshots: &mut std::collections::BTreeMap<String, (u32, String)>,
     theme: &Theme,
-) -> Result<String, String> {
+) -> Result<(String, String, String), String> {
     let turn_idx = chat_history.len() + 1;
-    println!("\n{}", render_user_chat_bubble(turn_idx, goal, theme));
+    let user_bubble = render_user_chat_bubble(turn_idx, goal, theme);
+    println!("\n{user_bubble}");
 
     let task = app
         .create_task(
@@ -1427,13 +1591,14 @@ fn run_goal_interactive(
     };
 
     let mut observer = ClaudeStepObserver::with_snapshots(
-        std::io::stdout(),
+        TeeWriter::new(),
         *theme,
         std::mem::take(file_snapshots),
     );
     match app.run_observed(model.as_mut(), &task.task_id, 50, &mut observer) {
         Ok(result) => {
             *file_snapshots = observer.take_snapshots();
+            let step_stream = observer.into_inner().into_string();
             stats.record(&result);
             let cost_usd = result
                 .cost
@@ -1458,8 +1623,16 @@ fn run_goal_interactive(
                 tool_calls,
                 cost_usd,
             });
-            print!("{}", render_run_summary(&result, theme));
-            Ok(result.task_id)
+            let summary_str = render_run_summary(&result, theme);
+            print!("{summary_str}");
+            let mid = format!("{user_bubble}\n{step_stream}{summary_str}");
+            let notif = format!(
+                "Task {} {} ({} steps · ${cost_usd:.4})",
+                result.task_id,
+                result.status.as_str(),
+                result.steps
+            );
+            Ok((result.task_id, mid, notif))
         }
         Err(err) => Err(format!(
             "{err}\n  (hint: configure SFAI_MODEL_BASE_URL / SFAI_MODEL_API_KEY / SFAI_MODEL_NAME, or use `/model offline`)"

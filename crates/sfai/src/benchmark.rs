@@ -216,7 +216,19 @@ fn task_id_of(envelope: &crate::contracts::ContextEnvelope) -> String {
         .to_string()
 }
 
-fn build_model(suite: &str, spec: &BenchSpec) -> Box<dyn ModelAdapter> {
+fn build_model(
+    suite: &str,
+    spec: &BenchSpec,
+    provider: Option<&crate::integrations::providers::profiles::ProviderProfile>,
+) -> Box<dyn ModelAdapter> {
+    if let Some(profile) = provider {
+        let adapter =
+            crate::integrations::providers::openai_compat::OpenAICompatibleAdapter::from_profile(
+                profile,
+            )
+            .unwrap_or_else(|e| panic!("invalid provider profile: {e}"));
+        return Box::new(adapter);
+    }
     match suite {
         "tool-use" => Box::new(crate::integrations::providers::fake::ReactiveDemoModel::new()),
         "dataset" => {
@@ -426,6 +438,15 @@ fn percentile(sorted: &[f64], p: f64) -> f64 {
 }
 
 pub fn run_benchmark(suites: &[String], ablations: &[String], size: usize) -> BenchReport {
+    run_benchmark_with_provider(suites, ablations, size, None)
+}
+
+pub fn run_benchmark_with_provider(
+    suites: &[String],
+    ablations: &[String],
+    size: usize,
+    provider: Option<&crate::integrations::providers::profiles::ProviderProfile>,
+) -> BenchReport {
     let mut tasks: Vec<BenchTaskResult> = Vec::new();
     for suite in suites {
         let specs = generate_tasks(suite, size);
@@ -459,7 +480,7 @@ pub fn run_benchmark(suites: &[String], ablations: &[String], size: usize) -> Be
                     Err(_) => continue,
                 };
                 seed_task(&app, spec, &task.task_id);
-                let mut model = build_model(suite, spec);
+                let mut model = build_model(suite, spec, provider);
                 let mut observer = crate::core::decision_kernel::NoopObserver;
                 let started = Instant::now();
                 let result = app.run_observed(model.as_mut(), &task.task_id, 50, &mut observer);
