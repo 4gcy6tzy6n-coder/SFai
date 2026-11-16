@@ -133,6 +133,16 @@ impl TaskStore {
                     self.ledger
                         .append(task_id, "runtime", "task.issue_recorded", issue, None)?;
                 }
+                "verification_recorded" => {
+                    let payload = ev.get("payload").cloned().unwrap_or_else(|| json!({}));
+                    self.ledger.append(
+                        task_id,
+                        "runtime",
+                        "verification.recorded",
+                        payload,
+                        None,
+                    )?;
+                }
                 "tool_committed" => {
                     let mut payload = ev.clone();
                     if let Some(obj) = payload.as_object_mut() {

@@ -87,10 +87,12 @@ pub fn build_app_with_options(
         approvals.clone(),
         objects.clone(),
         ledger.clone(),
+        storage_root.join("workspaces"),
     );
     let envelope_builder =
         EnvelopeBuilder::new(index.clone(), retriever.clone(), Some(ledger.clone()));
-    let verifier = VerificationEngine::new(objects.clone());
+    let verifier =
+        VerificationEngine::with_workspace(objects.clone(), storage_root.join("workspaces"));
     let acceptance = AcceptanceEvaluator::new(verifier.clone());
     let task_store = TaskStore::new(db.clone(), ledger.clone());
     let wiki = WikiCompiler::new(

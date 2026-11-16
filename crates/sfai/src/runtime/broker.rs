@@ -23,6 +23,7 @@ use crate::storage::objects::ObjectStore;
 use rusqlite::params;
 use serde_json::{json, Value};
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 
 pub struct ToolBroker {
@@ -31,6 +32,7 @@ pub struct ToolBroker {
     pub approvals: Rc<dyn ApprovalProvider>,
     pub objects: ObjectStore,
     pub ledger: EventLedger,
+    pub workspace_root: PathBuf,
     pub invocations: RefCell<Vec<String>>,
 }
 
@@ -41,6 +43,7 @@ impl ToolBroker {
         approvals: Rc<dyn ApprovalProvider>,
         objects: ObjectStore,
         ledger: EventLedger,
+        workspace_root: PathBuf,
     ) -> Self {
         Self {
             registry,
@@ -48,6 +51,7 @@ impl ToolBroker {
             approvals,
             objects,
             ledger,
+            workspace_root,
             invocations: RefCell::new(Vec::new()),
         }
     }
@@ -100,6 +104,7 @@ impl ToolBroker {
             }
         };
 
+        let risk_class = operation.risk_class.as_str().to_string();
         let decision = self.policy.evaluate(&manifest, &operation, &intent.task_id);
         if !decision.allowed {
             return self.deny(
@@ -154,6 +159,7 @@ impl ToolBroker {
             operation_id: operation_id.clone(),
             objects: self.objects.clone(),
             task_state: state.clone(),
+            workspace_root: self.workspace_root.join(&intent.task_id),
         };
         self.invocations.borrow_mut().push(operation_id.clone());
 
@@ -177,6 +183,7 @@ impl ToolBroker {
                     &[],
                     None,
                     Some(&exc.error_code),
+                    &risk_class,
                 )?;
                 Ok(self.result_from_run(
                     &run,
@@ -215,6 +222,7 @@ impl ToolBroker {
                     &exec.side_effects,
                     final_receipt,
                     None,
+                    &risk_class,
                 )?;
                 let mut result = self.result_from_run(&run, false, None);
                 result.state_events = exec.state_events;
@@ -253,6 +261,7 @@ impl ToolBroker {
         side_effects: &[String],
         receipt: Option<Value>,
         error_code: Option<&str>,
+        risk_class: &str,
     ) -> Result<ToolRun> {
         let run = ToolRun {
             tool_run_id: new_tool_run_id(),
@@ -296,6 +305,7 @@ impl ToolBroker {
                 "side_effects": run.side_effects,
                 "args_hash": run.args_hash,
                 "idempotency_key": intent.idempotency_key,
+                "risk_class": risk_class,
             }),
             intent.idempotency_key.as_deref(),
         )?;
@@ -321,6 +331,7 @@ impl ToolBroker {
             &[],
             receipt,
             Some(error_code),
+            "",
         )?;
         Ok(self.result_from_run(
             &run,

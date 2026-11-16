@@ -11,7 +11,7 @@ concrete Rust implementation. Deviations are recorded in `docs/decisions/`.
 | Capability & Skill | `capabilities/registry.rs`, `integrations/*` | discover/inspect/activate; handlers are pluggable closures |
 | Context intelligence | `context/index.rs`, `context/retrieval.rs`, `context/working_set.rs`, `core/context_envelope.rs` | root index, FTS5 search, bounded reads, budgeted working set |
 | Execution runtime | `runtime/broker.rs`, `runtime/policy.rs`, `integrations/fake_tools.rs` | policy-checked execution, approvals, receipts, idempotency |
-| Verify & Debug | `verify/engine.rs`, `verify/diagnostics.rs` | deterministic acceptance checks; §7 diagnostic contract |
+| Verify & Debug | `verify/engine.rs`, `verify/diagnostics.rs` | deterministic checks (artifacts, citations, JSON, placeholder text, workspace code tests), risk-based mandatory verification, §7 diagnostic contract |
 | Derived knowledge (M4) | `context/wiki.rs` | incremental Wiki: material-change classification, typed edges, provenance, contradictions, stale refs |
 | Skill packages (M5) | `capabilities/skills.rs` | `SKILL.md` discovery (metadata only) and per-run activation into the working set |
 | Infrastructure | `storage/db.rs`, `storage/event_ledger.rs`, `storage/objects.rs`, `telemetry/*` | SQLite WAL ledger, blob store, JSONL traces, cost accounting |
@@ -43,6 +43,7 @@ loop:
 | Denials are auditable | denials are committed as `ToolRun{status: denied}` + `tool.committed` events |
 | No silent completion | acceptance rules must pass before `Completed`; failures become open issues and block after bounded retries |
 | Events replay to the same state | `TaskStore.state` is a pure fold of the ledger; `resume()` compares replay against the task row |
+| Consequential actions need verification | `DecisionKernel::mandatory_verification_missing` blocks completion until a `verification.recorded` event follows the last external/high-impact action |
 | Costs are measured | `telemetry/cost.rs` counts model tokens, tool calls, verification runs, wall clock; trace replayer recomputes totals |
 | Wiki never overrides authority | `context/wiki.rs` writes only wiki tables; compile failures are logged and the cursor is not advanced |
 | Skill activation is per-run | `DecisionKernel::activated_skills`; envelopes include only activated skills, bounded to 4000 chars |

@@ -32,6 +32,9 @@ pub struct RunContext {
     pub operation_id: String,
     pub objects: ObjectStore,
     pub task_state: TaskState,
+    /// Per-task workspace directory where artifacts are materialized for
+    /// deterministic code checks (`code_tests_pass`).
+    pub workspace_root: std::path::PathBuf,
 }
 
 pub type Handler =

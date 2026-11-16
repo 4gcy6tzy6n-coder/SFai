@@ -25,14 +25,16 @@ issues **SF-001 – SF-014** (milestones M0–M3 core), written in Rust
 | Storage | SQLite (WAL) event ledger, checkpoint/resume, content-addressed blob store |
 | Context | Root/sub-index, FTS5 search, bounded `context.read`, working-set compiler with retrieval receipt |
 | Verify | Deterministic acceptance checks with machine-readable diagnostics |
+| Verify (M6) | code tests in the task workspace, JSON/document checks, risk-based mandatory verification after consequential actions, bounded repair with visible partial failure |
 | Wiki (M4) | Incremental derived compiler: material-change classification, typed edges, provenance, contradiction edges, stale-ref flags, write-amplification report |
 | Skills (M5) | `SKILL.md` packages: metadata-only discovery, per-run activation into the working set, version pinning, trust metadata |
 | Telemetry | JSONL traces, token/cost accounting, trace replayer |
 | Interfaces | CLI (`sfai run/resume/status/inspect/context/capabilities/skills/wiki/verify/export-trace`) |
 
 Not yet (tracked in the debug reports / plan): end-to-end acceptance against a
-real hosted model (offline fakes + mock HTTP only so far), multi-statement DB
-transactions, per-tenant ACL filtering (M7), learned sparse indexer (M8), web UI.
+real hosted model (offline fakes + mock HTTP only so far), OS-level sandboxing
+for code checks (subprocess + workspace only), multi-statement DB transactions,
+per-tenant ACL filtering (M7), learned sparse indexer (M8), web UI.
 
 ## Quick start
 

@@ -121,13 +121,23 @@ impl ObjectStore {
         provenance: &[String],
     ) -> Result<Artifact> {
         let digest = self.put_blob(data)?;
+        // Version is per (task, path) so "latest artifact" is well-defined and
+        // repairs produce a new revision instead of an ambiguous duplicate.
+        let version: u32 = self
+            .db
+            .query_one(
+                "SELECT MAX(version) AS m FROM artifacts WHERE task_id = ?1 AND path = ?2",
+                rusqlite::params![task_id, path],
+            )?
+            .map(|r| row_i64(&r, "m") as u32 + 1)
+            .unwrap_or(1);
         let artifact = Artifact {
             artifact_id: new_id("art"),
             task_id: task_id.to_string(),
             path: path.to_string(),
             checksum: digest,
             mime_type: mime_type.to_string(),
-            version: 1,
+            version,
             provenance: provenance.to_vec(),
             created_at: now(),
         };

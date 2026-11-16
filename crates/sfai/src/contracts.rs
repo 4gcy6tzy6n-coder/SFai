@@ -185,6 +185,16 @@ pub enum Verdict {
     Uncertain,
 }
 
+impl Verdict {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Verdict::Pass => "pass",
+            Verdict::Fail => "fail",
+            Verdict::Uncertain => "uncertain",
+        }
+    }
+}
+
 fn empty_object() -> Value {
     Value::Object(Default::default())
 }
@@ -261,6 +271,8 @@ pub struct TaskState {
     pub unresolved_errors: Vec<Value>,
     #[serde(default)]
     pub open_issues: Vec<Value>,
+    #[serde(default)]
+    pub verifications: Vec<Value>,
     #[serde(default = "empty_object")]
     pub checkpoint: Value,
     #[serde(default)]
@@ -284,6 +296,7 @@ impl Default for TaskState {
             completed_outputs: Vec::new(),
             unresolved_errors: Vec::new(),
             open_issues: Vec::new(),
+            verifications: Vec::new(),
             checkpoint: empty_object(),
             pinned_constraints: Vec::new(),
             tool_calls_made: 0,

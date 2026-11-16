@@ -150,6 +150,7 @@ impl WikiCompiler {
                 | "task.error_opened"
                 | "task.error_resolved"
                 | "task.issue_recorded"
+                | "verification.recorded"
         )
     }
 
@@ -331,6 +332,35 @@ impl WikiCompiler {
                          WHERE node_id = ?2",
                         params![now(), node],
                     )?;
+                }
+            }
+            "verification.recorded" => {
+                let verdict = payload
+                    .get("verdict")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("uncertain");
+                let criterion = payload
+                    .get("criterion")
+                    .and_then(|c| c.as_str())
+                    .unwrap_or("verification");
+                let target = payload
+                    .get("target_ref")
+                    .and_then(|t| t.as_str())
+                    .unwrap_or("");
+                let node = self.upsert_node(
+                    task_id,
+                    "verification",
+                    criterion,
+                    &format!("verification: {criterion}"),
+                    &format!("verdict={verdict}; target={target}"),
+                    &format!("event://{task_id}/verification/{criterion}"),
+                    vec![target.to_string()],
+                    report,
+                )?;
+                if verdict == "pass" {
+                    if let Some(task) = task_node {
+                        self.add_edge(task_id, task, &node, "verified_by", report)?;
+                    }
                 }
             }
             "task.issue_recorded" => {

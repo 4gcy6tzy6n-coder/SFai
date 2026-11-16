@@ -434,6 +434,15 @@ impl<'a> DecisionKernel<'a> {
                 })
                 .unwrap_or_default();
             let results = self.verifier.verify(task_id, &criteria)?;
+            for result in &results {
+                self.task_store.apply(
+                    task_id,
+                    &[json!({
+                        "type": "verification_recorded",
+                        "payload": serde_json::to_value(result)?,
+                    })],
+                )?;
+            }
             let failed = results
                 .iter()
                 .filter(|r| r.verdict == crate::contracts::Verdict::Fail)
@@ -674,6 +683,27 @@ impl<'a> DecisionKernel<'a> {
             )?;
             return Ok((false, None));
         }
+        // Risk-based mandatory validation: a consequential action must be
+        // followed by a recorded verification before the task may complete.
+        if self.mandatory_verification_missing(task_id)? {
+            let issue = json!({
+                "key": "mandatory_verification",
+                "criterion": "mandatory_verification",
+                "findings": "external/high-impact action executed without a later verification",
+                "error_code": "MANDATORY_VERIFICATION_MISSING",
+                "repair_hint": "Run verify.run after the consequential action.",
+            });
+            self.task_store.apply(
+                task_id,
+                &[json!({"type": "issue_recorded", "issue": issue})],
+            )?;
+            self.tracer.record(
+                task_id,
+                "mandatory_verification_blocked",
+                json!({"reason": "MANDATORY_VERIFICATION_MISSING"}),
+            )?;
+            return Ok((false, None));
+        }
         self.task_store
             .checkpoint(task_id, "acceptance passed", Some(&state.completed_outputs))?;
         let reason = if task.acceptance_rules.is_empty() {
@@ -689,6 +719,27 @@ impl<'a> DecisionKernel<'a> {
             json!({"status": "completed", "answer": answer}),
         )?;
         Ok((true, Some(TaskRunResult::completed(task_id, answer))))
+    }
+
+    /// True when the most recent external/high-impact action has no later
+    /// verification event in the ledger.
+    fn mandatory_verification_missing(&self, task_id: &str) -> Result<bool> {
+        let events = self.ledger.events_for(task_id, 0)?;
+        let mut last_consequential = 0i64;
+        let mut last_verification = 0i64;
+        for event in &events {
+            if event.event_type == "tool.committed" {
+                if let Some(risk) = event.payload.get("risk_class").and_then(|r| r.as_str()) {
+                    if matches!(risk, "external_write" | "high_impact") {
+                        last_consequential = event.seq;
+                    }
+                }
+            }
+            if event.event_type == "verification.recorded" {
+                last_verification = event.seq;
+            }
+        }
+        Ok(last_consequential > 0 && last_verification < last_consequential)
     }
 
     fn check_budgets(&self, task_id: &str, task: &Task) -> std::result::Result<(), String> {

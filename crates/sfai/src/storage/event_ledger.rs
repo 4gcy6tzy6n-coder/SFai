@@ -144,6 +144,7 @@ impl EventLedger {
                     }
                 }
                 "task.issue_recorded" => state.open_issues.push(p.clone()),
+                "verification.recorded" => state.verifications.push(p.clone()),
                 "task.checkpoint" => state.checkpoint = p.clone(),
                 "task.intent_started" => {
                     state.active_intent = p
