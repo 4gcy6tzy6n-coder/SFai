@@ -4,10 +4,11 @@
 //! addresses (root index + selected refs) plus bounded previews of recent
 //! tool results, with a retrieval receipt.
 
+use crate::capabilities::skills::{SkillActivation, MAX_INSTRUCTIONS_CHARS};
 use crate::context::index::ContextIndex;
 use crate::context::retrieval::ContextRetriever;
 use crate::context::working_set::compile_working_set;
-use crate::contracts::{ContextEnvelope, Task, TaskState};
+use crate::contracts::{ActiveSkill, ContextEnvelope, Task, TaskState};
 use crate::error::Result;
 use crate::storage::event_ledger::EventLedger;
 use serde_json::{json, Value};
@@ -37,7 +38,12 @@ impl EnvelopeBuilder {
         }
     }
 
-    pub fn build(&self, task: &Task, state: &TaskState) -> Result<ContextEnvelope> {
+    pub fn build(
+        &self,
+        task: &Task,
+        state: &TaskState,
+        skills: &[SkillActivation],
+    ) -> Result<ContextEnvelope> {
         // OR-joined goal terms: FTS5 barewords AND by default, which would
         // zero out recall for long natural-language goals.
         let terms: Vec<&str> = task
@@ -77,6 +83,19 @@ impl EnvelopeBuilder {
             root_index: self.index.root_index(&task.task_id),
             active_refs: selected_refs,
             recent_results: self.recent_results(&task.task_id)?,
+            active_skills: skills
+                .iter()
+                .map(|s| ActiveSkill {
+                    name: s.name.clone(),
+                    version: s.version.clone(),
+                    description: s.description.clone(),
+                    instructions: s
+                        .instructions
+                        .chars()
+                        .take(MAX_INSTRUCTIONS_CHARS)
+                        .collect(),
+                })
+                .collect(),
             budget: json!({
                 "active_context_tokens": self.active_context_tokens,
                 "tool_calls_remaining": task

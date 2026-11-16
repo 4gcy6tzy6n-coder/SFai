@@ -17,11 +17,13 @@ pub mod authority {
 
 pub mod capabilities {
     pub mod registry;
+    pub mod skills;
 }
 
 pub mod context {
     pub mod index;
     pub mod retrieval;
+    pub mod wiki;
     pub mod working_set;
 }
 

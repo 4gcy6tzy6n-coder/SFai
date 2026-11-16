@@ -10,6 +10,7 @@
 
 use crate::authority::tasks::TaskStore;
 use crate::capabilities::registry::CapabilityRegistry;
+use crate::capabilities::skills::{SkillActivation, SkillRegistry};
 use crate::context::retrieval::ContextRetriever;
 use crate::contracts::{ActionIntent, ContextEnvelope, IntentKind, ModelResponse, Task};
 use crate::core::context_envelope::EnvelopeBuilder;
@@ -24,6 +25,7 @@ use crate::telemetry::tracing::Tracer;
 use crate::verify::engine::VerificationEngine;
 use rusqlite::params;
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 
 pub const MAX_STEPS: usize = 50;
 pub const MAX_CONSECUTIVE_TOOL_ERRORS: u32 = 3;
@@ -73,8 +75,10 @@ pub struct DecisionKernel<'a> {
     pub verifier: &'a VerificationEngine,
     pub retriever: &'a ContextRetriever,
     pub registry: &'a CapabilityRegistry,
+    pub skills: &'a SkillRegistry,
     pub tracer: &'a Tracer,
     cost: CostLedger,
+    activated_skills: BTreeMap<String, SkillActivation>,
 }
 
 impl<'a> DecisionKernel<'a> {
@@ -89,6 +93,7 @@ impl<'a> DecisionKernel<'a> {
         verifier: &'a VerificationEngine,
         retriever: &'a ContextRetriever,
         registry: &'a CapabilityRegistry,
+        skills: &'a SkillRegistry,
         tracer: &'a Tracer,
     ) -> Self {
         Self {
@@ -101,8 +106,10 @@ impl<'a> DecisionKernel<'a> {
             verifier,
             retriever,
             registry,
+            skills,
             tracer,
             cost: CostLedger::new(),
+            activated_skills: BTreeMap::new(),
         }
     }
 
@@ -127,7 +134,9 @@ impl<'a> DecisionKernel<'a> {
         while steps < max_steps {
             steps += 1;
             let state = self.task_store.state(task_id)?;
-            let envelope = self.envelope_builder.build(&task, &state)?;
+            let active_skills: Vec<SkillActivation> =
+                self.activated_skills.values().cloned().collect();
+            let envelope = self.envelope_builder.build(&task, &state, &active_skills)?;
             let response = match self.decide(task_id, &envelope) {
                 Ok(r) => r,
                 Err(exc) => {
@@ -323,7 +332,7 @@ impl<'a> DecisionKernel<'a> {
     }
 
     fn dispatch(
-        &self,
+        &mut self,
         task_id: &str,
         intent: &ActionIntent,
         state: &crate::contracts::TaskState,
@@ -354,6 +363,36 @@ impl<'a> DecisionKernel<'a> {
             });
         }
         if intent.kind == IntentKind::Activate {
+            if let Some(skill_id) = intent.payload.get("skill_id").and_then(|s| s.as_str()) {
+                return match self.skills.activate(skill_id) {
+                    Ok(activation) => {
+                        let summary = format!(
+                            "activated skill {} v{}",
+                            activation.name, activation.version
+                        );
+                        self.activated_skills
+                            .insert(activation.name.clone(), activation);
+                        Ok(crate::contracts::ToolResult {
+                            operation_id: Some("skills.activate".into()),
+                            status: crate::contracts::ToolStatus::Ok,
+                            result_preview: summary,
+                            result_data: json!({"skill": skill_id}),
+                            ..Default::default()
+                        })
+                    }
+                    Err(exc) => Ok(crate::contracts::ToolResult {
+                        operation_id: Some("skills.activate".into()),
+                        status: crate::contracts::ToolStatus::Error,
+                        error_code: Some("UNKNOWN_SKILL".into()),
+                        diagnostic: Some(json!({
+                            "verdict": "fail",
+                            "error_code": "UNKNOWN_SKILL",
+                            "repair_hint": exc.to_string(),
+                        })),
+                        ..Default::default()
+                    }),
+                };
+            }
             let cid = intent
                 .payload
                 .get("capability_id")

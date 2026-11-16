@@ -5,7 +5,7 @@ use serde_json::json;
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use sfai::app::build_app;
+use sfai::app::{build_app_with_options, App};
 use sfai::contracts::Budget;
 use sfai::fixtures::{get_fixture, FIXTURE_NAMES};
 use sfai::integrations::providers::openai_compat::OpenAICompatibleAdapter;
@@ -18,6 +18,8 @@ use sfai::integrations::providers::openai_compat::OpenAICompatibleAdapter;
 struct Cli {
     #[arg(long, default_value = ".sfai", global = true)]
     storage: PathBuf,
+    #[arg(long, global = true)]
+    skills: Option<PathBuf>,
     #[command(subcommand)]
     cmd: Cmd,
 }
@@ -58,6 +60,35 @@ enum Cmd {
     },
     /// Export the run trace for a task
     ExportTrace { task_id: String },
+    /// Skill packages (M5): list metadata or show activated instructions
+    Skills {
+        #[command(subcommand)]
+        skills: SkillsCmd,
+    },
+    /// Derived Wiki operations (M4)
+    Wiki {
+        #[command(subcommand)]
+        wiki: WikiCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum SkillsCmd {
+    /// Discover installed skills (metadata only)
+    List {
+        #[arg(long, default_value = "")]
+        query: String,
+    },
+    /// Show one skill's instructions (activation payload)
+    Show { name: String },
+}
+
+#[derive(Subcommand)]
+enum WikiCmd {
+    /// Incrementally compile the Wiki for a task
+    Compile { task_id: String },
+    /// Show derived Wiki summary for a task
+    Summary { task_id: String },
 }
 
 #[derive(Subcommand)]
@@ -86,7 +117,12 @@ fn main() -> ExitCode {
 }
 
 fn dispatch(cli: Cli) -> Result<u8, String> {
-    let app = build_app(&cli.storage).map_err(|e| e.to_string())?;
+    let app: App = build_app_with_options(
+        &cli.storage,
+        std::rc::Rc::new(sfai::authority::approvals::DenyAllApprovals),
+        cli.skills.clone(),
+    )
+    .map_err(|e| e.to_string())?;
     match cli.cmd {
         Cmd::Run {
             fixture,
@@ -258,5 +294,41 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
             );
             Ok(0)
         }
+        Cmd::Skills { skills } => match skills {
+            SkillsCmd::List { query } => {
+                let manifests = app.skills.discover(&query, 50);
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&manifests).map_err(|e| e.to_string())?
+                );
+                Ok(0)
+            }
+            SkillsCmd::Show { name } => {
+                let activation = app.skills.activate(&name).map_err(|e| e.to_string())?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&activation).map_err(|e| e.to_string())?
+                );
+                Ok(0)
+            }
+        },
+        Cmd::Wiki { wiki } => match wiki {
+            WikiCmd::Compile { task_id } => {
+                let report = app.wiki.compile_task(&task_id).map_err(|e| e.to_string())?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&report).map_err(|e| e.to_string())?
+                );
+                Ok(0)
+            }
+            WikiCmd::Summary { task_id } => {
+                let summary = app.wiki.summary(&task_id).map_err(|e| e.to_string())?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?
+                );
+                Ok(0)
+            }
+        },
     }
 }

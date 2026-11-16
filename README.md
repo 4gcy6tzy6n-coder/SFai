@@ -25,12 +25,14 @@ issues **SF-001 – SF-014** (milestones M0–M3 core), written in Rust
 | Storage | SQLite (WAL) event ledger, checkpoint/resume, content-addressed blob store |
 | Context | Root/sub-index, FTS5 search, bounded `context.read`, working-set compiler with retrieval receipt |
 | Verify | Deterministic acceptance checks with machine-readable diagnostics |
+| Wiki (M4) | Incremental derived compiler: material-change classification, typed edges, provenance, contradiction edges, stale-ref flags, write-amplification report |
+| Skills (M5) | `SKILL.md` packages: metadata-only discovery, per-run activation into the working set, version pinning, trust metadata |
 | Telemetry | JSONL traces, token/cost accounting, trace replayer |
-| Interfaces | CLI (`sfai run/resume/status/inspect/context/capabilities/verify/export-trace`) |
+| Interfaces | CLI (`sfai run/resume/status/inspect/context/capabilities/skills/wiki/verify/export-trace`) |
 
-Not yet (tracked in the debug report / plan): live provider HTTP (fake models
-only), multi-statement DB transactions, per-tenant ACL filtering (M7), Wiki
-compiler (M4), Skill packages (M5), learned sparse indexer (M8), web UI.
+Not yet (tracked in the debug reports / plan): end-to-end acceptance against a
+real hosted model (offline fakes + mock HTTP only so far), multi-statement DB
+transactions, per-tenant ACL filtering (M7), learned sparse indexer (M8), web UI.
 
 ## Quick start
 
@@ -40,11 +42,13 @@ cargo run -- run --fixture tool-use
 cargo run -- run --fixture direct-answer
 cargo run -- status <task_id>
 cargo run -- export-trace <task_id>
+cargo run -- wiki summary --task <task_id>       # M4 derived knowledge
+cargo run -- skills list --skills skills         # M5 skill discovery (metadata only)
 ```
 
-Every run is fully offline and deterministic; real-model runs will use any
-OpenAI-compatible endpoint once the provider adapter gains HTTP support
-(`SFAI_MODEL_*`, see `.env.example`).
+Every run is fully offline and deterministic. Real-model runs use any
+OpenAI-compatible endpoint via `SFAI_MODEL_*` (see `.env.example`); the client
+is exercised against a local mock server in the test suite.
 
 ## Layout
 

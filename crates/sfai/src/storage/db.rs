@@ -14,7 +14,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 use std::rc::Rc;
 
-pub const SCHEMA_VERSION: i64 = 1;
+pub const SCHEMA_VERSION: i64 = 2;
 
 const SCHEMA: &str = r#"
 CREATE TABLE IF NOT EXISTS schema_meta (
@@ -108,6 +108,43 @@ CREATE TABLE IF NOT EXISTS index_nodes (
     ref_id TEXT NOT NULL,
     revision INTEGER NOT NULL,
     parent TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS wiki_nodes (
+    node_id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    kind TEXT NOT NULL,
+    node_key TEXT NOT NULL,
+    title TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    content_hash TEXT NOT NULL,
+    ref_id TEXT NOT NULL,
+    revision INTEGER NOT NULL,
+    provenance_json TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    updated_at TEXT NOT NULL,
+    UNIQUE(task_id, kind, node_key)
+);
+CREATE TABLE IF NOT EXISTS wiki_edges (
+    edge_id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    from_node TEXT NOT NULL,
+    to_node TEXT NOT NULL,
+    edge_type TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE(task_id, from_node, to_node, edge_type)
+);
+CREATE TABLE IF NOT EXISTS wiki_state (
+    task_id TEXT PRIMARY KEY,
+    last_compiled_seq INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS wiki_compile_log (
+    log_id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL,
+    seq INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    report_json TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
 "#;

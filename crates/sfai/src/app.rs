@@ -3,8 +3,10 @@
 use crate::authority::approvals::{ApprovalProvider, DenyAllApprovals};
 use crate::authority::tasks::TaskStore;
 use crate::capabilities::registry::CapabilityRegistry;
+use crate::capabilities::skills::SkillRegistry;
 use crate::context::index::ContextIndex;
 use crate::context::retrieval::ContextRetriever;
+use crate::context::wiki::{StoreResolver, WikiCompiler};
 use crate::contracts::{Budget, Task, TaskState, TaskStatus};
 use crate::core::context_envelope::EnvelopeBuilder;
 use crate::core::decision_kernel::{DecisionKernel, TaskRunResult};
@@ -32,6 +34,7 @@ pub struct App {
     pub index: ContextIndex,
     pub retriever: ContextRetriever,
     pub registry: Rc<CapabilityRegistry>,
+    pub skills: SkillRegistry,
     pub policy: PolicyEngine,
     pub approvals: Rc<dyn ApprovalProvider>,
     pub broker: ToolBroker,
@@ -39,6 +42,7 @@ pub struct App {
     pub verifier: VerificationEngine,
     pub acceptance: AcceptanceEvaluator,
     pub task_store: TaskStore,
+    pub wiki: WikiCompiler,
     pub trace_dir: PathBuf,
     pub side_effect_log: Rc<std::cell::RefCell<Vec<String>>>,
     pub tool_counts: Rc<std::cell::RefCell<std::collections::BTreeMap<String, u32>>>,
@@ -52,7 +56,18 @@ pub fn build_app_with_approvals(
     storage_root: impl AsRef<Path>,
     approvals: Rc<dyn ApprovalProvider>,
 ) -> Result<App> {
+    build_app_with_options(storage_root, approvals, None)
+}
+
+/// Build with an explicit Skill package directory (defaults to `<storage>/skills`).
+pub fn build_app_with_options(
+    storage_root: impl AsRef<Path>,
+    approvals: Rc<dyn ApprovalProvider>,
+    skills_dir: Option<PathBuf>,
+) -> Result<App> {
     let storage_root = storage_root.as_ref().to_path_buf();
+    let skills_dir = skills_dir.unwrap_or_else(|| storage_root.join("skills"));
+    let skills = SkillRegistry::load_from_dir(&skills_dir)?;
     std::fs::create_dir_all(&storage_root)?;
     let db = Database::open(storage_root.join("sfai.sqlite3"))?;
     let ledger = EventLedger::new(db.clone());
@@ -78,6 +93,14 @@ pub fn build_app_with_approvals(
     let verifier = VerificationEngine::new(objects.clone());
     let acceptance = AcceptanceEvaluator::new(verifier.clone());
     let task_store = TaskStore::new(db.clone(), ledger.clone());
+    let wiki = WikiCompiler::new(
+        db.clone(),
+        ledger.clone(),
+        Box::new(StoreResolver {
+            db: db.clone(),
+            objects: objects.clone(),
+        }),
+    );
     let trace_dir = storage_root.join("traces");
     Ok(App {
         storage_root,
@@ -87,6 +110,7 @@ pub fn build_app_with_approvals(
         index,
         retriever,
         registry,
+        skills,
         policy,
         approvals,
         broker,
@@ -94,6 +118,7 @@ pub fn build_app_with_approvals(
         verifier,
         acceptance,
         task_store,
+        wiki,
         trace_dir,
         side_effect_log,
         tool_counts,
@@ -140,9 +165,13 @@ impl App {
             &self.verifier,
             &self.retriever,
             self.registry.as_ref(),
+            &self.skills,
             &tracer,
         );
         let result = kernel.run_task(task_id, max_steps)?;
+        // M4: incremental Wiki compilation is best-effort and never affects
+        // task authority (it writes only to wiki tables).
+        let _ = self.wiki.compile_task(task_id);
         tracer.record(task_id, "cost", result.cost.clone())?;
         tracer.record(
             task_id,

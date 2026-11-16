@@ -576,6 +576,18 @@ pub struct RetrievalReceipt {
     pub reason_codes: Vec<String>,
 }
 
+/// An activated Skill's instructions, bounded, for the working set only.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+pub struct ActiveSkill {
+    pub name: String,
+    #[serde(default = "default_version_str")]
+    pub version: String,
+    #[serde(default)]
+    pub description: String,
+    pub instructions: String,
+}
+
 /// Bounded model-visible context (plan §3.5).
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -591,6 +603,8 @@ pub struct ContextEnvelope {
     pub active_refs: Vec<String>,
     #[serde(default)]
     pub recent_results: Vec<Value>,
+    #[serde(default)]
+    pub active_skills: Vec<ActiveSkill>,
     #[serde(default = "empty_object")]
     pub budget: Value,
     #[serde(default)]
