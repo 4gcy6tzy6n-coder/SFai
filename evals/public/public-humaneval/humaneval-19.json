@@ -1,0 +1,20 @@
+{
+ "id": "humaneval-19",
+ "suite": "public-humaneval",
+ "goal": "Implement the function in solution.py so that `python3 test_solution.py` passes.\n\nfrom typing import List\n\n\ndef sort_numbers(numbers: str) -> str:\n    \"\"\" Input is a space-delimited string of numberals from 'zero' to 'nine'.\n    Valid choices are 'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight' and 'nine'.\n    Return the string with numbers sorted from smallest to largest\n    >>> sort_numbers('three one five')\n    'one three five'\n    \"\"\"\n",
+ "constraints": [
+  "Keep the exact function signature.",
+  "Do not modify test_solution.py."
+ ],
+ "acceptance_rules": [
+  "code_tests_pass:python3 test_solution.py"
+ ],
+ "ground_truth": "ALL TESTS PASSED",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "acceptance",
+ "files": {
+  "solution.py": "from typing import List\n\n\ndef sort_numbers(numbers: str) -> str:\n    \"\"\" Input is a space-delimited string of numberals from 'zero' to 'nine'.\n    Valid choices are 'zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight' and 'nine'.\n    Return the string with numbers sorted from smallest to largest\n    >>> sort_numbers('three one five')\n    'one three five'\n    \"\"\"\n",
+  "test_solution.py": "\n\nMETADATA = {\n    'author': 'jt',\n    'dataset': 'test'\n}\n\n\ndef check(candidate):\n    assert candidate('') == ''\n    assert candidate('three') == 'three'\n    assert candidate('three five nine') == 'three five nine'\n    assert candidate('five zero four seven nine eight') == 'zero four five seven eight nine'\n    assert candidate('six five four three two one zero') == 'zero one two three four five six'\n\n\nif __name__ == \"__main__\":\n    check(sort_numbers)\n    print(\"ALL TESTS PASSED\")\n"
+ },
+ "source": "HumanEval (OpenAI, MIT), canonical split"
+}

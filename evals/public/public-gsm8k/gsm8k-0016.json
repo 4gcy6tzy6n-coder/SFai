@@ -1,0 +1,18 @@
+{
+ "id": "gsm8k-0016",
+ "suite": "public-gsm8k",
+ "goal": "Two trains leave San Rafael at the same time. They begin traveling westward, both traveling for 80 miles. The next day, they travel northwards, covering 150 miles. What's the distance covered by each train in the two days? Write the numeric answer to answer.json as {\"answer\": <number>}.",
+ "constraints": [
+  "Answer must be the exact numeric value."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:230"
+ ],
+ "ground_truth": "230",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {},
+ "source": "GSM8K (OpenAI grade-school-math, MIT), test split"
+}

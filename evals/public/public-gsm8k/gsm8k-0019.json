@@ -1,0 +1,18 @@
+{
+ "id": "gsm8k-0019",
+ "suite": "public-gsm8k",
+ "goal": "Marissa is hiking a 12-mile trail. She took 1 hour to walk the first 4 miles, then another hour to walk the next two miles. If she wants her average speed to be 4 miles per hour, what speed (in miles per hour) does she need to walk the remaining distance? Write the numeric answer to answer.json as {\"answer\": <number>}.",
+ "constraints": [
+  "Answer must be the exact numeric value."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:6"
+ ],
+ "ground_truth": "6",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {},
+ "source": "GSM8K (OpenAI grade-school-math, MIT), test split"
+}

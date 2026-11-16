@@ -1,0 +1,18 @@
+{
+ "id": "gsm8k-0001",
+ "suite": "public-gsm8k",
+ "goal": "A robe takes 2 bolts of blue fiber and half that much white fiber.  How many bolts in total does it take? Write the numeric answer to answer.json as {\"answer\": <number>}.",
+ "constraints": [
+  "Answer must be the exact numeric value."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:3"
+ ],
+ "ground_truth": "3",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {},
+ "source": "GSM8K (OpenAI grade-school-math, MIT), test split"
+}

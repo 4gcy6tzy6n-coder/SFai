@@ -1,0 +1,18 @@
+{
+ "id": "gsm8k-0011",
+ "suite": "public-gsm8k",
+ "goal": "Toula went to the bakery and bought various types of pastries. She bought 3 dozen donuts which cost $68 per dozen, 2 dozen mini cupcakes which cost $80 per dozen, and 6 dozen mini cheesecakes for $55 per dozen. How much was the total cost? Write the numeric answer to answer.json as {\"answer\": <number>}.",
+ "constraints": [
+  "Answer must be the exact numeric value."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:694"
+ ],
+ "ground_truth": "694",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {},
+ "source": "GSM8K (OpenAI grade-school-math, MIT), test split"
+}

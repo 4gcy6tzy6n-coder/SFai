@@ -1,0 +1,18 @@
+{
+ "id": "gsm8k-0004",
+ "suite": "public-gsm8k",
+ "goal": "Every day, Wendi feeds each of her chickens three cups of mixed chicken feed, containing seeds, mealworms and vegetables to help keep them healthy.  She gives the chickens their feed in three separate meals. In the morning, she gives her flock of chickens 15 cups of feed.  In the afternoon, she gives her chickens another 25 cups of feed.  How many cups of feed does she need to give her chickens in the final meal of the day if the size of Wendi's flock is 20 chickens? Write the numeric answer to answer.json as {\"answer\": <number>}.",
+ "constraints": [
+  "Answer must be the exact numeric value."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:20"
+ ],
+ "ground_truth": "20",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {},
+ "source": "GSM8K (OpenAI grade-school-math, MIT), test split"
+}

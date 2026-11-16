@@ -1,0 +1,20 @@
+{
+ "id": "humaneval-4",
+ "suite": "public-humaneval",
+ "goal": "Implement the function in solution.py so that `python3 test_solution.py` passes.\n\nfrom typing import List\n\n\ndef mean_absolute_deviation(numbers: List[float]) -> float:\n    \"\"\" For a given list of input numbers, calculate Mean Absolute Deviation\n    around the mean of this dataset.\n    Mean Absolute Deviation is the average absolute difference between each\n    element and a centerpoint (mean in this case):\n    MAD = average | x - x_mean |\n    >>> mean_absolute_deviation([1.0, 2.0, 3.0, 4.0])\n    1.0\n    \"\"\"\n",
+ "constraints": [
+  "Keep the exact function signature.",
+  "Do not modify test_solution.py."
+ ],
+ "acceptance_rules": [
+  "code_tests_pass:python3 test_solution.py"
+ ],
+ "ground_truth": "ALL TESTS PASSED",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "acceptance",
+ "files": {
+  "solution.py": "from typing import List\n\n\ndef mean_absolute_deviation(numbers: List[float]) -> float:\n    \"\"\" For a given list of input numbers, calculate Mean Absolute Deviation\n    around the mean of this dataset.\n    Mean Absolute Deviation is the average absolute difference between each\n    element and a centerpoint (mean in this case):\n    MAD = average | x - x_mean |\n    >>> mean_absolute_deviation([1.0, 2.0, 3.0, 4.0])\n    1.0\n    \"\"\"\n",
+  "test_solution.py": "\n\nMETADATA = {\n    'author': 'jt',\n    'dataset': 'test'\n}\n\n\ndef check(candidate):\n    assert abs(candidate([1.0, 2.0, 3.0]) - 2.0/3.0) < 1e-6\n    assert abs(candidate([1.0, 2.0, 3.0, 4.0]) - 1.0) < 1e-6\n    assert abs(candidate([1.0, 2.0, 3.0, 4.0, 5.0]) - 6.0/5.0) < 1e-6\n\n\n\nif __name__ == \"__main__\":\n    check(mean_absolute_deviation)\n    print(\"ALL TESTS PASSED\")\n"
+ },
+ "source": "HumanEval (OpenAI, MIT), canonical split"
+}

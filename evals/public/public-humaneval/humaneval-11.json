@@ -1,0 +1,20 @@
+{
+ "id": "humaneval-11",
+ "suite": "public-humaneval",
+ "goal": "Implement the function in solution.py so that `python3 test_solution.py` passes.\n\nfrom typing import List\n\n\ndef string_xor(a: str, b: str) -> str:\n    \"\"\" Input are two strings a and b consisting only of 1s and 0s.\n    Perform binary XOR on these inputs and return result also as a string.\n    >>> string_xor('010', '110')\n    '100'\n    \"\"\"\n",
+ "constraints": [
+  "Keep the exact function signature.",
+  "Do not modify test_solution.py."
+ ],
+ "acceptance_rules": [
+  "code_tests_pass:python3 test_solution.py"
+ ],
+ "ground_truth": "ALL TESTS PASSED",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "acceptance",
+ "files": {
+  "solution.py": "from typing import List\n\n\ndef string_xor(a: str, b: str) -> str:\n    \"\"\" Input are two strings a and b consisting only of 1s and 0s.\n    Perform binary XOR on these inputs and return result also as a string.\n    >>> string_xor('010', '110')\n    '100'\n    \"\"\"\n",
+  "test_solution.py": "\n\nMETADATA = {\n    'author': 'jt',\n    'dataset': 'test'\n}\n\n\ndef check(candidate):\n    assert candidate('111000', '101010') == '010010'\n    assert candidate('1', '1') == '0'\n    assert candidate('0101', '0000') == '0101'\n\n\nif __name__ == \"__main__\":\n    check(string_xor)\n    print(\"ALL TESTS PASSED\")\n"
+ },
+ "source": "HumanEval (OpenAI, MIT), canonical split"
+}

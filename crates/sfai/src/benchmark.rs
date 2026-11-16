@@ -21,7 +21,18 @@ use std::time::Instant;
 
 pub const BENCH_VERSION: &str = "0.2.1";
 pub const DEFAULT_SIZE: usize = 6;
-pub const SUITES: [&str; 4] = ["tool-use", "dataset", "long-horizon", "edge-case"];
+pub const SUITES: [&str; 7] = [
+    "tool-use",
+    "dataset",
+    "long-horizon",
+    "edge-case",
+    "public-gsm8k",
+    "public-humaneval",
+    "public-sheets",
+];
+/// Combined public benchmark task database (GSM8K + HumanEval subsets; see
+/// evals/public/README for sources and licenses).
+pub const PUBLIC_TASKS_JSON: &str = include_str!("../../../evals/public/tasks.json");
 pub const ABLATIONS: [&str; 6] = [
     "none",
     "full_context",
@@ -69,7 +80,7 @@ fn default_repetitions() -> usize {
     1
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BenchSpec {
     pub id: String,
     pub suite: String,
@@ -83,7 +94,20 @@ pub struct BenchSpec {
     /// (fabrication detection, used by edge-case).
     #[serde(default)]
     pub ground_truth_inverted: bool,
+    /// "marker" (default): correctness = ground-truth marker in deliverable.
+    /// "acceptance": correctness = acceptance rules pass (public code suites
+    /// where the shipped test suite is the independent judge).
+    #[serde(default = "default_truth_kind")]
+    pub ground_truth_kind: String,
+    /// Workspace files seeded before the run (public benchmark data).
+    #[serde(default)]
+    pub files: std::collections::BTreeMap<String, String>,
+    #[serde(default)]
     pub seed: u64,
+}
+
+fn default_truth_kind() -> String {
+    "marker".to_string()
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -240,6 +264,14 @@ pub fn generate_tasks(suite: &str, size: usize) -> Vec<BenchSpec> {
 }
 
 pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSpec> {
+    if suite.starts_with("public-") {
+        let mut tasks = generate_public(suite);
+        tasks.truncate(size.max(1));
+        for t in &mut tasks {
+            t.seed = seed;
+        }
+        return tasks;
+    }
     match suite {
         "tool-use" => (0..size)
             .map(|i| BenchSpec {
@@ -256,6 +288,8 @@ pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSp
                 ],
                 ground_truth: "source://".into(),
                 ground_truth_inverted: false,
+                ground_truth_kind: default_truth_kind(),
+                files: Default::default(),
                 seed,
             })
             .collect(),
@@ -276,6 +310,8 @@ pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSp
                     ],
                     ground_truth: total.to_string(),
                     ground_truth_inverted: false,
+                    ground_truth_kind: default_truth_kind(),
+                    files: Default::default(),
                     seed,
                 }
             })
@@ -296,6 +332,8 @@ pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSp
                     ],
                     ground_truth: marker,
                     ground_truth_inverted: false,
+                    ground_truth_kind: default_truth_kind(),
+                    files: Default::default(),
                     seed,
                 }
             })
@@ -314,11 +352,20 @@ pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSp
                 ],
                 ground_truth: "source://missing@1".into(),
                 ground_truth_inverted: true,
+                ground_truth_kind: default_truth_kind(),
+                files: Default::default(),
                 seed,
             })
             .collect(),
         other => panic!("unknown suite: {other}"),
     }
+}
+
+/// Load public benchmark tasks (data-driven, frozen with the repo).
+pub fn generate_public(suite: &str) -> Vec<BenchSpec> {
+    let all: Vec<BenchSpec> =
+        serde_json::from_str(PUBLIC_TASKS_JSON).expect("public tasks database must parse");
+    all.into_iter().filter(|t| t.suite == suite).collect()
 }
 
 fn task_id_of(envelope: &crate::contracts::ContextEnvelope) -> String {
@@ -432,6 +479,34 @@ fn build_model(
                 ))),
             ]))
         }
+        // Public suites are meant for real models; offline runs use a minimal
+        // script purely to exercise the plumbing (loading, seeding, judging).
+        suite if suite.starts_with("public-") => Box::new(ScriptedModel::new(vec![
+            Step::Intent(Box::new(intent(
+                IntentKind::Finish,
+                "unknown",
+                "offline_smoke",
+                json!({"text": "offline smoke: not solved"}),
+                vec![],
+                None,
+            ))),
+            Step::Intent(Box::new(intent(
+                IntentKind::Finish,
+                "unknown",
+                "offline_smoke",
+                json!({"text": "offline smoke: not solved"}),
+                vec![],
+                None,
+            ))),
+            Step::Intent(Box::new(intent(
+                IntentKind::Finish,
+                "unknown",
+                "offline_smoke",
+                json!({"text": "offline smoke: not solved"}),
+                vec![],
+                None,
+            ))),
+        ])),
         "edge-case" => Box::new(ScriptedModel::new(vec![
             Step::Intent(Box::new(intent(
                 IntentKind::Execute,
@@ -471,6 +546,12 @@ fn build_model(
 }
 
 fn seed_task(app: &App, spec: &BenchSpec, task_id: &str) {
+    // Public benchmark data files ship with the task spec.
+    for (path, content) in &spec.files {
+        let _ = app
+            .objects
+            .put_artifact(task_id, path, content.as_bytes(), "text/plain", &[]);
+    }
     match spec.suite.as_str() {
         "dataset" => {
             let mut csv = String::from("row,amount\n");
@@ -660,6 +741,20 @@ pub fn run_benchmark_full(
                         Err(e) => ("error".to_string(), Some(e.to_string())),
                     };
                     let (acceptance_passed, correct) = match &result {
+                        Ok(_) if spec.ground_truth_kind == "acceptance" => {
+                            // Public code suites: the shipped test suite is the
+                            // independent judge; correctness == acceptance.
+                            let acceptance = app
+                                .verifier
+                                .verify(&task.task_id, &spec.acceptance_rules)
+                                .map(|results| {
+                                    results
+                                        .iter()
+                                        .all(|r| r.verdict == crate::contracts::Verdict::Pass)
+                                })
+                                .unwrap_or(false);
+                            (acceptance, acceptance)
+                        }
                         Ok(_) => {
                             let acceptance = app
                                 .verifier

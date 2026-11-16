@@ -66,7 +66,10 @@
 - **3.5 安全**：策略分级、审批收据、幂等、审计事件。
 
 ### 4 Benchmark（Agent Framework Benchmark）
-- 套件：tool-use / dataset / long-horizon / edge-case（捏造压力）；
+- 套件：tool-use / dataset / long-horizon / edge-case（捏造压力）
+  + **公开任务集**（`public-gsm8k` / `public-humaneval` / `public-sheets`，
+  GSM8K[MIT]、HumanEval[MIT]、SpreadsheetBench[CC-BY-SA-4.0] 真实迁移，
+  统一 TaskSpec、确定性 ground truth、随仓冻结）；
 - 指标：success、correctness（artifact-scoped ground truth）、**false-success**、p50/p95、in/out tokens、cost/success、routing quality（steps/tool calls/misroutes/loop-guard/ask_user）；
 - 消融：none / full_context / no_pinned / no_verification / no_wiki / **forced_pipeline**；
 - 公平契约：同模型、同任务字符串、同工具信息、同判分器（值匹配）、fresh storage/任务；
@@ -83,6 +86,8 @@
 | 5.6 E7 跨框架 | LangGraph/smolagents/Pydantic AI vs sfai | T6 | e7-*, e7ext-* |
 | 5.7 E8 Decide-Act 消融 | 自路由 vs 强制管线（双向结果：long-horizon 1.00/0.00、dataset 0.25/0.75） | T7 | e8-routing |
 | 5.6b E7 修正史 | 三次判分器事故与修正（附录材料） | 附录 | e7 系列 + Debug 报告 |
+| 5.9 **E9 公开基准** | GSM8K/HumanEval（/SpreadsheetBench）公开任务集迁移 + 门对照 | T9 | e9-public-* |
+| 5.9b E8 | Decide-Act 双向消融 | T7 | e8-routing |
 | 5.8 E6/E6b 性能 | 冷启动/大信封/GIL 5.1×/内存 | T8、F2 扩展曲线 | e6 系列 |
 
 ### 6 Analysis

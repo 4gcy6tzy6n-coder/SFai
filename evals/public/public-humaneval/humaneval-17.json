@@ -1,0 +1,20 @@
+{
+ "id": "humaneval-17",
+ "suite": "public-humaneval",
+ "goal": "Implement the function in solution.py so that `python3 test_solution.py` passes.\n\nfrom typing import List\n\n\ndef parse_music(music_string: str) -> List[int]:\n    \"\"\" Input to this function is a string representing musical notes in a special ASCII format.\n    Your task is to parse this string and return list of integers corresponding to how many beats does each\n    not last.\n\n    Here is a legend:\n    'o' - whole note, lasts four beats\n    'o|' - half note, lasts two beats\n    '.|' - quater note, lasts one beat\n\n    >>> parse_music('o o| .| o| o| .| .| .| .| o o')\n    [4, 2, 1, 2, 2, 1, 1, 1, 1, 4, 4]\n    \"\"\"\n",
+ "constraints": [
+  "Keep the exact function signature.",
+  "Do not modify test_solution.py."
+ ],
+ "acceptance_rules": [
+  "code_tests_pass:python3 test_solution.py"
+ ],
+ "ground_truth": "ALL TESTS PASSED",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "acceptance",
+ "files": {
+  "solution.py": "from typing import List\n\n\ndef parse_music(music_string: str) -> List[int]:\n    \"\"\" Input to this function is a string representing musical notes in a special ASCII format.\n    Your task is to parse this string and return list of integers corresponding to how many beats does each\n    not last.\n\n    Here is a legend:\n    'o' - whole note, lasts four beats\n    'o|' - half note, lasts two beats\n    '.|' - quater note, lasts one beat\n\n    >>> parse_music('o o| .| o| o| .| .| .| .| o o')\n    [4, 2, 1, 2, 2, 1, 1, 1, 1, 4, 4]\n    \"\"\"\n",
+  "test_solution.py": "\n\nMETADATA = {\n    'author': 'jt',\n    'dataset': 'test'\n}\n\n\ndef check(candidate):\n    assert candidate('') == []\n    assert candidate('o o o o') == [4, 4, 4, 4]\n    assert candidate('.| .| .| .|') == [1, 1, 1, 1]\n    assert candidate('o| o| .| .| o o o o') == [2, 2, 1, 1, 4, 4, 4, 4]\n    assert candidate('o| .| o| .| o o| o o|') == [2, 1, 2, 1, 4, 2, 4, 2]\n\n\nif __name__ == \"__main__\":\n    check(parse_music)\n    print(\"ALL TESTS PASSED\")\n"
+ },
+ "source": "HumanEval (OpenAI, MIT), canonical split"
+}

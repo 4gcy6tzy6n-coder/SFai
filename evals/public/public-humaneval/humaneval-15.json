@@ -1,0 +1,20 @@
+{
+ "id": "humaneval-15",
+ "suite": "public-humaneval",
+ "goal": "Implement the function in solution.py so that `python3 test_solution.py` passes.\n\n\n\ndef string_sequence(n: int) -> str:\n    \"\"\" Return a string containing space-delimited numbers starting from 0 upto n inclusive.\n    >>> string_sequence(0)\n    '0'\n    >>> string_sequence(5)\n    '0 1 2 3 4 5'\n    \"\"\"\n",
+ "constraints": [
+  "Keep the exact function signature.",
+  "Do not modify test_solution.py."
+ ],
+ "acceptance_rules": [
+  "code_tests_pass:python3 test_solution.py"
+ ],
+ "ground_truth": "ALL TESTS PASSED",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "acceptance",
+ "files": {
+  "solution.py": "\n\ndef string_sequence(n: int) -> str:\n    \"\"\" Return a string containing space-delimited numbers starting from 0 upto n inclusive.\n    >>> string_sequence(0)\n    '0'\n    >>> string_sequence(5)\n    '0 1 2 3 4 5'\n    \"\"\"\n",
+  "test_solution.py": "\n\nMETADATA = {\n    'author': 'jt',\n    'dataset': 'test'\n}\n\n\ndef check(candidate):\n    assert candidate(0) == '0'\n    assert candidate(3) == '0 1 2 3'\n    assert candidate(10) == '0 1 2 3 4 5 6 7 8 9 10'\n\n\nif __name__ == \"__main__\":\n    check(string_sequence)\n    print(\"ALL TESTS PASSED\")\n"
+ },
+ "source": "HumanEval (OpenAI, MIT), canonical split"
+}

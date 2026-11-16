@@ -1,0 +1,13 @@
+{
+  "name": "e9-public-deepseek",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "price_in": 0.27,
+  "price_out": 1.10,
+  "suites": ["public-gsm8k", "public-humaneval"],
+  "ablations": ["none", "no_verification"],
+  "size": 20,
+  "repetitions": 1,
+  "seed": 0,
+  "note": "E9: public benchmark migration (GSM8K + HumanEval subsets), verification-gate contrast"
+}
