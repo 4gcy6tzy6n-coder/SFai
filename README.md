@@ -37,6 +37,7 @@ issues **SF-001 – SF-014** (milestones M0–M3 core), written in Rust
 | Verify | Deterministic acceptance checks with machine-readable diagnostics |
 | Verify (M6) | code tests in the task workspace, JSON/document checks, risk-based mandatory verification after consequential actions, bounded repair with visible partial failure |
 | Wiki (M4) | Incremental derived compiler: material-change classification, typed edges, provenance, contradiction edges, stale-ref flags, write-amplification report |
+| Memory | **三层记忆：Index / Wiki / Way** —— Way 层记每任务的方法/优点/**出错重点**，AI 自写自记，检索路径 index→wiki→way |
 | Skills (M5) | `SKILL.md` packages: metadata-only discovery, per-run activation into the working set, version pinning, trust metadata |
 | Telemetry | JSONL traces, token/cost accounting, trace replayer |
 | Interfaces | CLI (`sfai run/resume/status/inspect/context/capabilities/skills/wiki/verify/export-trace`) |

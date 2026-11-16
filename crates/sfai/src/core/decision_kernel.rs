@@ -549,6 +549,12 @@ impl<'a> DecisionKernel<'a> {
     ) -> Result<crate::contracts::ToolResult> {
         use crate::contracts::ToolResult;
         if intent.kind == IntentKind::Execute {
+            // `way.write` is the memory layer's self-authoring op: the model
+            // records method/wins/mistakes/lesson itself (three-layer memory:
+            // index → wiki → way).
+            if intent.payload.get("operation_id").and_then(|o| o.as_str()) == Some("way.write") {
+                return self.dispatch_way_write(task_id, intent);
+            }
             return self.broker.execute(intent, state);
         }
         if intent.kind == IntentKind::Discover {
@@ -696,6 +702,71 @@ impl<'a> DecisionKernel<'a> {
                 "error_code": "UNHANDLED_INTENT_KIND",
                 "repair_hint": format!("no dispatcher for kind {}", intent.kind.as_str()),
             })),
+            ..Default::default()
+        })
+    }
+
+    /// Model-authored Way entry: persisted in the memory layer and bridged
+    /// into the Wiki so retrieval flows index → wiki → way.
+    fn dispatch_way_write(
+        &self,
+        task_id: &str,
+        intent: &ActionIntent,
+    ) -> Result<crate::contracts::ToolResult> {
+        use crate::contracts::{ToolResult, ToolStatus};
+        let args = intent
+            .payload
+            .get("arguments")
+            .cloned()
+            .unwrap_or(Value::Null);
+        let strv = |k: &str| {
+            args.get(k)
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string()
+        };
+        let listv = |k: &str| -> Vec<String> {
+            args.get(k)
+                .and_then(|v| v.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let memory = self
+            .envelope_builder
+            .memory
+            .as_ref()
+            .ok_or_else(|| SfaiError::Internal("memory store not wired".into()))?;
+        let note = memory.write_way(
+            task_id,
+            &strv("method"),
+            &listv("wins"),
+            &listv("mistakes"),
+            &strv("lesson"),
+        )?;
+        self.tracer.record(
+            task_id,
+            "way_written",
+            json!({"note_id": note.note_id, "revision": note.revision}),
+        )?;
+        Ok(ToolResult {
+            operation_id: Some("way.write".into()),
+            status: ToolStatus::Ok,
+            result_preview: format!("way recorded: {} (rev {})", note.title, note.revision),
+            result_refs: vec![format!("memory://{}@{}", note.note_id, note.revision)],
+            state_events: vec![json!({
+                "type": "tool_committed",
+                "operation_id": "way.write",
+                "status": "ok",
+                "result_preview": format!("way recorded: {}", note.title),
+                "result_refs": [format!("memory://{}@{}", note.note_id, note.revision)],
+                "side_effects": ["way.recorded"],
+                "idempotency_key": intent.idempotency_key,
+            })],
+            result_data: json!(note.to_value()),
             ..Default::default()
         })
     }

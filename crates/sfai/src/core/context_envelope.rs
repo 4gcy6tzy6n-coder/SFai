@@ -6,6 +6,7 @@
 
 use crate::capabilities::skills::{SkillActivation, MAX_INSTRUCTIONS_CHARS};
 use crate::context::index::ContextIndex;
+use crate::context::memory::{MemoryStore, MEMORY_ENVELOPE_LIMIT};
 use crate::context::retrieval::ContextRetriever;
 use crate::context::working_set::compile_working_set;
 use crate::contracts::{ActiveSkill, ContextEnvelope, Task, TaskState};
@@ -21,6 +22,7 @@ pub struct EnvelopeBuilder {
     pub index: ContextIndex,
     pub retriever: ContextRetriever,
     pub ledger: Option<EventLedger>,
+    pub memory: Option<MemoryStore>,
     pub active_context_tokens: usize,
     /// How many retrieval candidates the envelope considers (full-context
     /// ablation raises this).
@@ -39,6 +41,7 @@ impl EnvelopeBuilder {
             index,
             retriever,
             ledger,
+            memory: None,
             active_context_tokens: ACTIVE_CONTEXT_TOKENS,
             candidate_limit: 12,
             pin_constraints: true,
@@ -95,6 +98,7 @@ impl EnvelopeBuilder {
             root_index: self.index.root_index(&task.task_id),
             active_refs: selected_refs,
             recent_results: self.recent_results(&task.task_id)?,
+            memory: self.memory_notes(task)?,
             active_skills: skills
                 .iter()
                 .map(|s| ActiveSkill {
@@ -139,6 +143,26 @@ impl EnvelopeBuilder {
             "tool_calls_made": state.tool_calls_made,
             "model_calls_made": state.model_calls_made,
         })
+    }
+
+    /// Bounded memory: Way lessons first (mistakes are what the agent must
+    /// not repeat), then other relevant notes (progressive disclosure).
+    fn memory_notes(&self, task: &Task) -> Result<Vec<Value>> {
+        let Some(memory) = &self.memory else {
+            return Ok(Vec::new());
+        };
+        let way = memory.way_relevant(&task.goal, MEMORY_ENVELOPE_LIMIT)?;
+        let mut out: Vec<Value> = way.iter().map(|n| n.to_value()).collect();
+        let others = memory.relevant(&task.goal, Some(&task.task_id), MEMORY_ENVELOPE_LIMIT * 2)?;
+        for note in others {
+            if out.len() >= MEMORY_ENVELOPE_LIMIT {
+                break;
+            }
+            if note.kind != "way" {
+                out.push(note.to_value());
+            }
+        }
+        Ok(out)
     }
 
     /// Bounded previews of recent tool/meta results (short previews + refs,

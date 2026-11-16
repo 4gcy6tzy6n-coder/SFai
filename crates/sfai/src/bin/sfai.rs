@@ -112,6 +112,11 @@ enum Cmd {
         #[command(subcommand)]
         skills: SkillsCmd,
     },
+    /// Memory layer: list / show / add notes (MEMORY.md style)
+    Memory {
+        #[command(subcommand)]
+        mem: MemCmd,
+    },
     /// Derived Wiki operations (M4)
     Wiki {
         #[command(subcommand)]
@@ -195,6 +200,28 @@ enum SkillsCmd {
     },
     /// Show one skill's instructions (activation payload)
     Show { name: String },
+}
+
+#[derive(Subcommand)]
+enum MemCmd {
+    /// List memory notes (optionally by kind: project|topic|task_summary|log)
+    List {
+        #[arg(long, default_value = "")]
+        kind: String,
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
+    },
+    /// Show the MEMORY.md-style index
+    Index,
+    /// Add or revise a topic note
+    Add {
+        #[arg(long, default_value = "general")]
+        topic: String,
+        #[arg(long)]
+        title: String,
+        #[arg(long)]
+        body: String,
+    },
 }
 
 #[derive(Subcommand)]
@@ -554,6 +581,44 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
                         serde_json::to_string_pretty(&activation).map_err(|e| e.to_string())?
                     );
                 }
+                Ok(0)
+            }
+        },
+        Cmd::Memory { mem } => match mem {
+            MemCmd::List { kind, limit } => {
+                let notes = app
+                    .memory
+                    .list_notes(if kind.is_empty() { None } else { Some(&kind) }, limit)
+                    .map_err(|e| e.to_string())?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(
+                        &notes.iter().map(|n| n.to_value()).collect::<Vec<_>>()
+                    )
+                    .map_err(|e| e.to_string())?
+                );
+                Ok(0)
+            }
+            MemCmd::Index => {
+                let idx = app.memory.index_markdown().map_err(|e| e.to_string())?;
+                println!("{idx}");
+                Ok(0)
+            }
+            MemCmd::Add { topic, title, body } => {
+                let note = app
+                    .memory
+                    .write_note(
+                        sfai::context::memory::MemoryKind::Topic,
+                        None,
+                        &topic,
+                        &title,
+                        &body,
+                    )
+                    .map_err(|e| e.to_string())?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&note.to_value()).map_err(|e| e.to_string())?
+                );
                 Ok(0)
             }
         },

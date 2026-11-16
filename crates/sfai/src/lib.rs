@@ -24,6 +24,7 @@ pub mod capabilities {
 
 pub mod context {
     pub mod index;
+    pub mod memory;
     pub mod retrieval;
     pub mod wiki;
     pub mod working_set;

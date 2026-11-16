@@ -19,6 +19,7 @@ concrete Rust implementation. Deviations are recorded in `docs/decisions/`.
 | Verify & Debug | `verify/engine.rs`, `verify/diagnostics.rs` | deterministic checks (artifacts, citations, JSON, placeholder text, workspace code tests), risk-based mandatory verification, §7 diagnostic contract |
 | Derived knowledge (M4) | `context/wiki.rs` | incremental Wiki: material-change classification, typed edges, provenance, contradictions, stale refs |
 | Skill packages (M5) | `capabilities/skills.rs` | `SKILL.md` discovery (metadata only) and per-run activation into the working set |
+| Memory (three layers) | `context/memory.rs` + Wiki bridge | **Index / Wiki / Way** (ADR-023): Way = method + wins + mistakes, self-authored (`way.write`) + auto-extracted, bridged into Wiki, surfaced in the envelope |
 | Infrastructure | `storage/db.rs`, `storage/event_ledger.rs`, `storage/objects.rs`, `telemetry/*` | SQLite WAL ledger, blob store, JSONL traces, cost accounting |
 
 ## Data flow

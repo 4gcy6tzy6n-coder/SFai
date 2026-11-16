@@ -26,6 +26,7 @@ use serde_json::{json, Value};
 
 pub const NODE_KINDS: &[&str] = &[
     "task",
+    "way",
     "evidence",
     "artifact",
     "failure",
@@ -618,6 +619,33 @@ impl WikiCompiler {
             ],
         )?;
         Ok(())
+    }
+
+    /// Bridge: a Way note becomes a `way` wiki node linked to the task node —
+    /// the Wiki carries content from both the index layer and the Way layer
+    /// (three-layer memory: index → wiki → way).
+    pub fn ingest_way(
+        &self,
+        task_id: &str,
+        note_id: &str,
+        title: &str,
+        body: &str,
+    ) -> Result<CompileReport> {
+        let mut report = CompileReport::default();
+        let node = self.upsert_node(
+            task_id,
+            "way",
+            note_id,
+            title,
+            body,
+            &format!("memory://{note_id}@1"),
+            vec![format!("memory://{note_id}@1")],
+            &mut report,
+        )?;
+        if let Some(task_node) = self.find_node_id(task_id, "task", "task")? {
+            self.add_edge(task_id, &task_node, &node, "relevant_to", &mut report)?;
+        }
+        Ok(report)
     }
 
     // ---- read API (CLI / tests) ----

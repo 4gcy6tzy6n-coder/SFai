@@ -98,6 +98,18 @@ CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
     title, body, ref_id UNINDEXED, task_id UNINDEXED, kind UNINDEXED,
     tokenize='porter'
 );
+CREATE TABLE IF NOT EXISTS memory_notes (
+    note_id TEXT PRIMARY KEY,
+    task_id TEXT,
+    kind TEXT NOT NULL,
+    topic TEXT NOT NULL,
+    title TEXT NOT NULL,
+    body TEXT NOT NULL,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE(task_id, kind, topic, title)
+);
 CREATE TABLE IF NOT EXISTS index_nodes (
     node_id TEXT PRIMARY KEY,
     task_id TEXT NOT NULL,

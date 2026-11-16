@@ -616,6 +616,9 @@ pub struct ContextEnvelope {
     pub active_refs: Vec<String>,
     #[serde(default)]
     pub recent_results: Vec<Value>,
+    /// Bounded auto-memory / topic notes relevant to this step (memory layer).
+    #[serde(default)]
+    pub memory: Vec<Value>,
     #[serde(default)]
     pub active_skills: Vec<ActiveSkill>,
     #[serde(default = "empty_object")]

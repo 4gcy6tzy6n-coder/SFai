@@ -349,6 +349,7 @@ mod tests {
             root_index: BTreeMap::new(),
             active_refs: vec![],
             recent_results: vec![],
+            memory: vec![],
             active_skills: vec![],
             budget: json!({}),
             retrieval_receipt: None,

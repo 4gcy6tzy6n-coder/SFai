@@ -5,6 +5,7 @@ use crate::authority::tasks::TaskStore;
 use crate::capabilities::registry::CapabilityRegistry;
 use crate::capabilities::skills::SkillRegistry;
 use crate::context::index::ContextIndex;
+use crate::context::memory::MemoryStore;
 use crate::context::retrieval::ContextRetriever;
 use crate::context::wiki::{StoreResolver, WikiCompiler};
 use crate::contracts::{Budget, Task, TaskState, TaskStatus};
@@ -42,6 +43,7 @@ pub struct App {
     pub verifier: VerificationEngine,
     pub acceptance: AcceptanceEvaluator,
     pub task_store: TaskStore,
+    pub memory: MemoryStore,
     pub wiki: WikiCompiler,
     pub trace_dir: PathBuf,
     pub side_effect_log: Arc<Mutex<Vec<String>>>,
@@ -92,12 +94,14 @@ pub fn build_app_with_options(
         ledger.clone(),
         storage_root.join("workspaces"),
     );
-    let envelope_builder =
+    let mut envelope_builder =
         EnvelopeBuilder::new(index.clone(), retriever.clone(), Some(ledger.clone()));
+    envelope_builder.memory = Some(MemoryStore::new(db.clone()));
     let verifier =
         VerificationEngine::with_workspace(objects.clone(), storage_root.join("workspaces"));
     let acceptance = AcceptanceEvaluator::new(verifier.clone());
     let task_store = TaskStore::new(db.clone(), ledger.clone());
+    let memory = MemoryStore::new(db.clone());
     let wiki = WikiCompiler::new(
         db.clone(),
         ledger.clone(),
@@ -123,6 +127,7 @@ pub fn build_app_with_options(
         verifier,
         acceptance,
         task_store,
+        memory,
         wiki,
         trace_dir,
         side_effect_log,
@@ -206,6 +211,62 @@ impl App {
         // task authority (it writes only to wiki tables).
         if self.wiki_compile_enabled {
             let _ = self.wiki.compile_task(task_id);
+        }
+        // Auto-memory (Claude Code style): every finished run leaves a
+        // task_summary note in the memory layer.
+        // "Remember the way of every task" — terminal runs (including blocked
+        // ones) all leave a Way entry; mistakes live in the failed runs.
+        if matches!(
+            result.status,
+            crate::contracts::TaskStatus::Completed
+                | crate::contracts::TaskStatus::Blocked
+                | crate::contracts::TaskStatus::Failed
+        ) {
+            let state = self.task_store.state(task_id)?;
+            let task = self.task_store.load(task_id)?;
+            let _ = self.memory.auto_summarize_task(
+                task_id,
+                &task.goal,
+                result.status.as_str(),
+                &state.completed_outputs,
+                state.open_issues.len(),
+            );
+            // Way layer: auto-extract what went wrong from the run history —
+            // mistakes are the emphasized part of the agent's memory.
+            let mut mistakes: Vec<String> = Vec::new();
+            for event in self.ledger.events_for(task_id, 0)? {
+                if event.event_type == "task.error_opened" {
+                    if let Some(code) = event.payload.get("error_code").and_then(|c| c.as_str()) {
+                        mistakes.push(format!("tool error: {code}"));
+                    }
+                }
+            }
+            for issue in &state.open_issues {
+                if let Some(code) = issue.get("error_code").and_then(|c| c.as_str()) {
+                    mistakes.push(format!("acceptance issue: {code}"));
+                }
+            }
+            mistakes.sort();
+            mistakes.dedup();
+            let wins: Vec<String> = state.completed_outputs.clone();
+            let lesson = if mistakes.is_empty() {
+                "clean run: keep the current method".to_string()
+            } else {
+                format!("avoid repeating: {}", mistakes.join("; "))
+            };
+            let method = format!(
+                "self-routed Decide-Act loop (status={})",
+                result.status.as_str()
+            );
+            if let Ok(note) = self
+                .memory
+                .auto_way_from_run(task_id, &method, &wins, &mistakes, &lesson)
+            {
+                // Wiki bridge: index → wiki → way.
+                let _ = self
+                    .wiki
+                    .ingest_way(task_id, &note.note_id, &note.title, &note.body);
+            }
         }
         tracer.record(task_id, "cost", result.cost.clone())?;
         tracer.record(
