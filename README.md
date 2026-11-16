@@ -2,7 +2,12 @@
 
 A general-purpose, **model-native agent platform**: the main model chooses its
 next action, capability, Skill, and information access — no mandatory
-Planner → Executor → Reviewer workflow, no external LLM router. The runtime
+Planner → Executor → Reviewer workflow, no external LLM router.
+
+**Dual deliverables (non-negotiable):**
+1. a usable agent **application** (CLI + UI + local API), and
+2. a **top-tier research paper** supported by completed experiments
+   (see [`docs/research-plan.md`](docs/research-plan.md)). The runtime
 provides stable meta-operations, a discoverable capability fabric,
 **index-native context**, policy-aware execution, and independent verification.
 
@@ -31,6 +36,7 @@ issues **SF-001 – SF-014** (milestones M0–M3 core), written in Rust
 | Telemetry | JSONL traces, token/cost accounting, trace replayer |
 | Interfaces | CLI (`sfai run/resume/status/inspect/context/capabilities/skills/wiki/verify/export-trace`) |
 | API (M7) | local HTTP + SSE service (`sfai serve`): tasks, events, run/cancel, artifacts, trace, wiki, verify |
+| Research (M8) | offline sparse-context harness (`sfai eval`): 5 context policies, success/recall/constraint/token/cost metrics, JSON+Markdown reports |
 
 Not yet (tracked in the debug reports / plan): end-to-end acceptance against a
 real hosted model (offline fakes + mock HTTP only so far), OS-level sandboxing
@@ -48,6 +54,7 @@ cargo run -- status <task_id>
 cargo run -- export-trace <task_id>
 cargo run -- wiki summary <task_id>             # M4 derived knowledge
 cargo run -- skills list --skills skills         # M5 skill discovery (metadata only)
+cargo run -- eval --size 12                      # M8 offline evaluation harness
 ```
 
 ## HTTP API (for the UI)

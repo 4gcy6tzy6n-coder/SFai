@@ -2,6 +2,7 @@
 
 pub mod contracts;
 pub mod error;
+pub mod eval;
 pub mod ids;
 
 pub mod storage {

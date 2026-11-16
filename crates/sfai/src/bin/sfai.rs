@@ -11,15 +11,17 @@ use std::sync::Arc;
 use sfai::app::{build_app_with_options, App};
 use sfai::contracts::Budget;
 use sfai::fixtures::{get_fixture, FIXTURE_NAMES};
+use sfai::integrations::providers::fake::ConversationalDemoModel;
 use sfai::integrations::providers::openai_compat::OpenAICompatibleAdapter;
 use sfai::telemetry::replay::replay_trace;
 use sfai::ui::{
-    detect_model_label, render_box, render_capabilities_table, render_context_read,
-    render_context_search, render_doctor_card, render_fixtures_table, render_help_card,
-    render_inspect_timeline, render_prompt, render_run_summary, render_skill_detail,
-    render_skills_list, render_task_status_card, render_tasks_table, render_trace_card,
-    render_verification_card, render_welcome_banner, render_wiki_view, BannerInfo,
-    ClaudeStepObserver, CliApprovalProvider, PermissionMode, Theme,
+    detect_model_label, read_chat_input_box, render_box, render_capabilities_table,
+    render_chat_history, render_context_read, render_context_search, render_doctor_card,
+    render_fixtures_table, render_help_card, render_inspect_timeline, render_run_summary,
+    render_skill_detail, render_skills_list, render_task_status_card, render_tasks_table,
+    render_trace_card, render_user_chat_bubble, render_verification_card, render_welcome_banner,
+    render_wiki_view, BannerInfo, ChatComposerStatus, ChatTurn, ClaudeStepObserver,
+    CliApprovalProvider, PermissionMode, Theme,
 };
 
 #[derive(Parser)]
@@ -104,6 +106,18 @@ enum Cmd {
     },
     /// Run system health and configuration diagnostics
     Doctor,
+    /// Run the offline sparse-context evaluation harness (research track)
+    Eval {
+        #[arg(long, default_value = "sparse-context")]
+        suite: String,
+        #[arg(long, default_value_t = 12)]
+        size: usize,
+        #[arg(long, default_value_t = 120)]
+        budget: usize,
+        /// Write the JSON report to this path (default: <storage>/evals/report-<ts>.json)
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Serve the local HTTP API for the UI (tasks, events/SSE, artifacts, wiki)
     Serve {
         /// TCP port (default 8765)
@@ -488,6 +502,27 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
                 Ok(0)
             }
         },
+        Cmd::Eval {
+            suite,
+            size,
+            budget,
+            out,
+        } => {
+            let report = sfai::eval::run_suite(&suite, size, budget);
+            println!("{}", report.render_markdown());
+            let stamp = report.generated_at.replace([':', '.'], "-");
+            let path = out.unwrap_or_else(|| {
+                cli.storage
+                    .join("evals")
+                    .join(format!("report-{stamp}.json"))
+            });
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&path, report.to_json()).map_err(|e| e.to_string())?;
+            eprintln!("report written to {}", path.display());
+            Ok(0)
+        }
         Cmd::Serve { port, bind } => {
             let addr: std::net::SocketAddr = format!("{bind}:{port}")
                 .parse()
@@ -584,13 +619,42 @@ fn resolve_target_task(arg: &str, last_task: Option<&str>, app: &App) -> Result<
     Err("no active task yet; run a goal or `/run <fixture>` first".into())
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ChatModelMode {
+    Auto,
+    Offline,
+    Online,
+}
+
+impl ChatModelMode {
+    fn label(&self) -> String {
+        match self {
+            ChatModelMode::Auto => {
+                let adapter = OpenAICompatibleAdapter::from_env();
+                if !adapter.base_url.trim().is_empty() && !adapter.model_name.trim().is_empty() {
+                    adapter.model_name
+                } else {
+                    "sfai/local-assistant (auto)".into()
+                }
+            }
+            ChatModelMode::Offline => "sfai/local-assistant (offline)".into(),
+            ChatModelMode::Online => {
+                let adapter = OpenAICompatibleAdapter::from_env();
+                if !adapter.model_name.trim().is_empty() {
+                    format!("{} (online)", adapter.model_name)
+                } else {
+                    "openai-compat (unconfigured)".into()
+                }
+            }
+        }
+    }
+}
+
 fn interactive(
     app: &App,
     approvals: &Arc<CliApprovalProvider>,
     theme: Theme,
 ) -> Result<u8, String> {
-    use std::io::{BufRead, Write};
-
     print_banner(app, approvals, &theme);
 
     let mut last_task: Option<String> = app
@@ -601,28 +665,22 @@ fn interactive(
     let mut session_constraints: Vec<String> = Vec::new();
     let mut session_acceptance: Vec<String> = Vec::new();
     let mut stats = SessionStats::default();
+    let mut chat_history: Vec<ChatTurn> = Vec::new();
+    let mut model_mode = ChatModelMode::Auto;
 
-    let stdin = std::io::stdin();
     loop {
-        print!(
-            "{}",
-            render_prompt(
-                last_task.as_deref(),
-                approvals.mode(),
-                session_constraints.len(),
-                &theme
-            )
-        );
-        std::io::stdout().flush().map_err(|e| e.to_string())?;
-        let mut line = String::new();
-        let read = stdin
-            .lock()
-            .read_line(&mut line)
-            .map_err(|e| e.to_string())?;
-        if read == 0 {
-            println!();
+        let model_label = model_mode.label();
+        let composer_status = ChatComposerStatus {
+            active_task: last_task.as_deref(),
+            perm_mode: approvals.mode(),
+            model_label: &model_label,
+            constraints_count: session_constraints.len(),
+            turns_count: chat_history.len(),
+            session_cost_usd: stats.total_cost_usd,
+        };
+        let Some(line) = read_chat_input_box(&composer_status, &theme)? else {
             break;
-        }
+        };
         let input = line.trim();
         if input.is_empty() {
             continue;
@@ -632,6 +690,50 @@ fn interactive(
         }
         if matches!(input, "/help" | "?") {
             println!("{}\n", render_help_card(&theme));
+            continue;
+        }
+        if matches!(input, "/history" | "/chat") {
+            println!("{}\n", render_chat_history(&chat_history, &theme));
+            continue;
+        }
+        if input == "/model" || input.starts_with("/model ") {
+            let arg = input.strip_prefix("/model").unwrap_or("").trim();
+            match arg {
+                "" => println!(
+                    "  {} active chat model = {} (use `/model auto|offline|online` to switch)\n",
+                    theme.accent("✻"),
+                    theme.cyan(&model_mode.label())
+                ),
+                "auto" => {
+                    model_mode = ChatModelMode::Auto;
+                    println!(
+                        "  {} switched chat model to {}\n",
+                        theme.green_bold("✓"),
+                        theme.cyan(&model_mode.label())
+                    );
+                }
+                "offline" | "local" => {
+                    model_mode = ChatModelMode::Offline;
+                    println!(
+                        "  {} switched chat model to {}\n",
+                        theme.green_bold("✓"),
+                        theme.cyan(&model_mode.label())
+                    );
+                }
+                "online" | "provider" => {
+                    model_mode = ChatModelMode::Online;
+                    println!(
+                        "  {} switched chat model to {}\n",
+                        theme.green_bold("✓"),
+                        theme.cyan(&model_mode.label())
+                    );
+                }
+                other => println!(
+                    "  {} invalid model mode {:?}; choose auto, offline, or online\n",
+                    theme.red_bold("✗"),
+                    other
+                ),
+            }
             continue;
         }
         if input == "/clear" {
@@ -979,7 +1081,9 @@ fn interactive(
             &goal,
             &session_constraints,
             &session_acceptance,
+            model_mode,
             &mut stats,
+            &mut chat_history,
             &theme,
         ) {
             Ok(task_id) => last_task = Some(task_id),
@@ -1046,14 +1150,20 @@ fn resume_interactive(
     Ok(result.task_id)
 }
 
+#[allow(clippy::too_many_arguments)]
 fn run_goal_interactive(
     app: &App,
     goal: &str,
     constraints: &[String],
     acceptance_rules: &[String],
+    model_mode: ChatModelMode,
     stats: &mut SessionStats,
+    chat_history: &mut Vec<ChatTurn>,
     theme: &Theme,
 ) -> Result<String, String> {
+    let turn_idx = chat_history.len() + 1;
+    println!("\n{}", render_user_chat_bubble(turn_idx, goal, theme));
+
     let task = app
         .create_task(
             goal,
@@ -1062,16 +1172,52 @@ fn run_goal_interactive(
             Some(Budget::default()),
         )
         .map_err(|e| e.to_string())?;
-    let mut model = OpenAICompatibleAdapter::from_env();
+
+    let mut model: Box<dyn sfai::core::model_adapter::ModelAdapter> = match model_mode {
+        ChatModelMode::Offline => Box::new(ConversationalDemoModel::new()),
+        ChatModelMode::Online => Box::new(OpenAICompatibleAdapter::from_env()),
+        ChatModelMode::Auto => {
+            let online = OpenAICompatibleAdapter::from_env();
+            if !online.base_url.trim().is_empty() && !online.model_name.trim().is_empty() {
+                Box::new(online)
+            } else {
+                Box::new(ConversationalDemoModel::new())
+            }
+        }
+    };
+
     let mut observer = ClaudeStepObserver::new(std::io::stdout(), *theme);
-    match app.run_observed(&mut model, &task.task_id, 50, &mut observer) {
+    match app.run_observed(model.as_mut(), &task.task_id, 50, &mut observer) {
         Ok(result) => {
             stats.record(&result);
+            let cost_usd = result
+                .cost
+                .get("cost_usd")
+                .and_then(|c| c.as_f64())
+                .unwrap_or(0.0);
+            let tool_calls = result
+                .cost
+                .get("tool_calls")
+                .and_then(|c| c.as_u64())
+                .unwrap_or(0);
+            chat_history.push(ChatTurn {
+                turn_index: turn_idx,
+                task_id: result.task_id.clone(),
+                user_message: goal.to_string(),
+                ai_response: result
+                    .answer
+                    .clone()
+                    .unwrap_or_else(|| format!("Task status: {}", result.status.as_str())),
+                status: result.status,
+                steps: result.steps,
+                tool_calls,
+                cost_usd,
+            });
             print!("{}", render_run_summary(&result, theme));
             Ok(result.task_id)
         }
         Err(err) => Err(format!(
-            "{err}\n  (hint: configure SFAI_MODEL_BASE_URL / SFAI_MODEL_API_KEY / SFAI_MODEL_NAME, or use `/run <fixture>` offline)"
+            "{err}\n  (hint: configure SFAI_MODEL_BASE_URL / SFAI_MODEL_API_KEY / SFAI_MODEL_NAME, or use `/model offline`)"
         )),
     }
 }

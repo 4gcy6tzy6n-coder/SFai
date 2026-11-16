@@ -225,9 +225,58 @@ fn interactive_repl_denial_blocks_external_write_with_open_issue() {
     assert!(out.status.success());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(stdout.contains("⊘ Denied by user"), "stdout: {stdout}");
-    assert!(stdout.contains("status=waiting_approval"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("status=waiting_approval"),
+        "stdout: {stdout}"
+    );
     assert!(
         stdout.contains("May I send this email? The previous attempt was denied."),
+        "stdout: {stdout}"
+    );
+}
+
+#[test]
+fn interactive_chat_dialog_box_and_multi_turn_conversation() {
+    let dir = temp_root();
+    let storage = dir.path().to_str().expect("utf8").to_string();
+    let bin = sfai_bin();
+
+    let mut child = Command::new(bin)
+        .args(["--no-color", "--storage", &storage])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn interactive chat");
+
+    {
+        let stdin = child.stdin.as_mut().expect("stdin");
+        stdin
+            .write_all(
+                "你好，介绍一下你自己\n搜索并写一份关于 sparse context 的研究报告\n检索之前的证据来源\n/history\n/quit\n"
+                    .as_bytes(),
+            )
+            .expect("write chat turns");
+    }
+
+    let out = child.wait_with_output().expect("wait");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    // Bottom chat input dialog box & status bar
+    assert!(stdout.contains("✻ Chat with sfai AI"), "stdout: {stdout}");
+    assert!(stdout.contains("│ ❯ sfai>"), "stdout: {stdout}");
+    assert!(stdout.contains("⏵⏵"), "stdout: {stdout}");
+    // User & AI conversation bubbles across turns
+    assert!(stdout.contains("▸ You · Turn #1"), "stdout: {stdout}");
+    assert!(stdout.contains("▸ You · Turn #2"), "stdout: {stdout}");
+    assert!(stdout.contains("▸ You · Turn #3"), "stdout: {stdout}");
+    assert!(stdout.contains("✻ Response (sfai AI)"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("Retrieved 3 indexed source(s)"),
         "stdout: {stdout}"
     );
 }

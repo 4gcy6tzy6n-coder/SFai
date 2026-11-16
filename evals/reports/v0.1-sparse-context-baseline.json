@@ -1,0 +1,666 @@
+{
+  "suite": "sparse-context",
+  "generated_at": "2026-11-16T07:34:09.538978+00:00",
+  "budget_tokens": 120,
+  "scenario_count": 12,
+  "metrics": [
+    {
+      "policy": "full_history",
+      "scenarios": 12,
+      "success_rate": 1.0,
+      "context_recall": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 810.0,
+      "mean_cost_usd": 0.0008699999999999998,
+      "cost_per_success_usd": 0.0008699999999999998,
+      "mean_latency_ms": 0.010659916666666672
+    },
+    {
+      "policy": "retrieval_topk",
+      "scenarios": 12,
+      "success_rate": 0.0,
+      "context_recall": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0,
+      "mean_cost_usd": 0.000084,
+      "cost_per_success_usd": 0.0,
+      "mean_latency_ms": 0.016885416666666667
+    },
+    {
+      "policy": "sliding_window",
+      "scenarios": 12,
+      "success_rate": 0.0,
+      "context_recall": 0.3333333333333333,
+      "constraint_retention": 0.0,
+      "mean_tokens": 121.33333333333333,
+      "mean_cost_usd": 0.00018133333333333334,
+      "cost_per_success_usd": 0.0,
+      "mean_latency_ms": 0.0020243333333333333
+    },
+    {
+      "policy": "summary",
+      "scenarios": 12,
+      "success_rate": 0.0,
+      "context_recall": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0,
+      "mean_cost_usd": 0.000084,
+      "cost_per_success_usd": 0.0,
+      "mean_latency_ms": 0.024566083333333336
+    },
+    {
+      "policy": "working_set",
+      "scenarios": 12,
+      "success_rate": 1.0,
+      "context_recall": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 107.0,
+      "mean_cost_usd": 0.00016700000000000002,
+      "cost_per_success_usd": 0.00016700000000000002,
+      "mean_latency_ms": 0.24345841666666668
+    }
+  ],
+  "per_scenario": [
+    {
+      "scenario": "scenario-00",
+      "outcomes": [
+        {
+          "policy": "full_history",
+          "included_docs": 40,
+          "tokens_in": 810,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.06875
+        },
+        {
+          "policy": "sliding_window",
+          "included_docs": 6,
+          "tokens_in": 120,
+          "context_recall": false,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.002417
+        },
+        {
+          "policy": "summary",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.1505
+        },
+        {
+          "policy": "retrieval_topk",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.017333
+        },
+        {
+          "policy": "working_set",
+          "included_docs": 4,
+          "tokens_in": 107,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.375792
+        }
+      ]
+    },
+    {
+      "scenario": "scenario-01",
+      "outcomes": [
+        {
+          "policy": "full_history",
+          "included_docs": 40,
+          "tokens_in": 810,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.007125
+        },
+        {
+          "policy": "sliding_window",
+          "included_docs": 6,
+          "tokens_in": 120,
+          "context_recall": false,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.001917
+        },
+        {
+          "policy": "summary",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.014042
+        },
+        {
+          "policy": "retrieval_topk",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.016333
+        },
+        {
+          "policy": "working_set",
+          "included_docs": 4,
+          "tokens_in": 107,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.22029100000000001
+        }
+      ]
+    },
+    {
+      "scenario": "scenario-02",
+      "outcomes": [
+        {
+          "policy": "full_history",
+          "included_docs": 40,
+          "tokens_in": 810,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.005458
+        },
+        {
+          "policy": "sliding_window",
+          "included_docs": 6,
+          "tokens_in": 124,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.001834
+        },
+        {
+          "policy": "summary",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.01325
+        },
+        {
+          "policy": "retrieval_topk",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.017959
+        },
+        {
+          "policy": "working_set",
+          "included_docs": 4,
+          "tokens_in": 107,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.213083
+        }
+      ]
+    },
+    {
+      "scenario": "scenario-03",
+      "outcomes": [
+        {
+          "policy": "full_history",
+          "included_docs": 40,
+          "tokens_in": 810,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.004959
+        },
+        {
+          "policy": "sliding_window",
+          "included_docs": 6,
+          "tokens_in": 120,
+          "context_recall": false,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.001791
+        },
+        {
+          "policy": "summary",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.012875
+        },
+        {
+          "policy": "retrieval_topk",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.015959
+        },
+        {
+          "policy": "working_set",
+          "included_docs": 4,
+          "tokens_in": 107,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.21595899999999998
+        }
+      ]
+    },
+    {
+      "scenario": "scenario-04",
+      "outcomes": [
+        {
+          "policy": "full_history",
+          "included_docs": 40,
+          "tokens_in": 810,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.005084
+        },
+        {
+          "policy": "sliding_window",
+          "included_docs": 6,
+          "tokens_in": 120,
+          "context_recall": false,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.00175
+        },
+        {
+          "policy": "summary",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.012917
+        },
+        {
+          "policy": "retrieval_topk",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.015917
+        },
+        {
+          "policy": "working_set",
+          "included_docs": 4,
+          "tokens_in": 107,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.21187499999999998
+        }
+      ]
+    },
+    {
+      "scenario": "scenario-05",
+      "outcomes": [
+        {
+          "policy": "full_history",
+          "included_docs": 40,
+          "tokens_in": 810,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.005208
+        },
+        {
+          "policy": "sliding_window",
+          "included_docs": 6,
+          "tokens_in": 124,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.001792
+        },
+        {
+          "policy": "summary",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.012667
+        },
+        {
+          "policy": "retrieval_topk",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.015916000000000003
+        },
+        {
+          "policy": "working_set",
+          "included_docs": 4,
+          "tokens_in": 107,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.21025
+        }
+      ]
+    },
+    {
+      "scenario": "scenario-06",
+      "outcomes": [
+        {
+          "policy": "full_history",
+          "included_docs": 40,
+          "tokens_in": 810,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.004834
+        },
+        {
+          "policy": "sliding_window",
+          "included_docs": 6,
+          "tokens_in": 120,
+          "context_recall": false,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.00175
+        },
+        {
+          "policy": "summary",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.012625
+        },
+        {
+          "policy": "retrieval_topk",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.015709
+        },
+        {
+          "policy": "working_set",
+          "included_docs": 4,
+          "tokens_in": 107,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.212834
+        }
+      ]
+    },
+    {
+      "scenario": "scenario-07",
+      "outcomes": [
+        {
+          "policy": "full_history",
+          "included_docs": 40,
+          "tokens_in": 810,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.005083000000000001
+        },
+        {
+          "policy": "sliding_window",
+          "included_docs": 6,
+          "tokens_in": 120,
+          "context_recall": false,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.001666
+        },
+        {
+          "policy": "summary",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.0125
+        },
+        {
+          "policy": "retrieval_topk",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.015666
+        },
+        {
+          "policy": "working_set",
+          "included_docs": 4,
+          "tokens_in": 107,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.209542
+        }
+      ]
+    },
+    {
+      "scenario": "scenario-08",
+      "outcomes": [
+        {
+          "policy": "full_history",
+          "included_docs": 40,
+          "tokens_in": 810,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.005167
+        },
+        {
+          "policy": "sliding_window",
+          "included_docs": 6,
+          "tokens_in": 124,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.003625
+        },
+        {
+          "policy": "summary",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.01275
+        },
+        {
+          "policy": "retrieval_topk",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.015833
+        },
+        {
+          "policy": "working_set",
+          "included_docs": 4,
+          "tokens_in": 107,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.21229199999999998
+        }
+      ]
+    },
+    {
+      "scenario": "scenario-09",
+      "outcomes": [
+        {
+          "policy": "full_history",
+          "included_docs": 40,
+          "tokens_in": 810,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.004834
+        },
+        {
+          "policy": "sliding_window",
+          "included_docs": 6,
+          "tokens_in": 120,
+          "context_recall": false,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.0018750000000000001
+        },
+        {
+          "policy": "summary",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.012625
+        },
+        {
+          "policy": "retrieval_topk",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.015709
+        },
+        {
+          "policy": "working_set",
+          "included_docs": 4,
+          "tokens_in": 107,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.238333
+        }
+      ]
+    },
+    {
+      "scenario": "scenario-10",
+      "outcomes": [
+        {
+          "policy": "full_history",
+          "included_docs": 40,
+          "tokens_in": 810,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.006125
+        },
+        {
+          "policy": "sliding_window",
+          "included_docs": 6,
+          "tokens_in": 120,
+          "context_recall": false,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.0020829999999999998
+        },
+        {
+          "policy": "summary",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.015375000000000002
+        },
+        {
+          "policy": "retrieval_topk",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.016249999999999997
+        },
+        {
+          "policy": "working_set",
+          "included_docs": 4,
+          "tokens_in": 107,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.22508399999999998
+        }
+      ]
+    },
+    {
+      "scenario": "scenario-11",
+      "outcomes": [
+        {
+          "policy": "full_history",
+          "included_docs": 40,
+          "tokens_in": 810,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.005292000000000001
+        },
+        {
+          "policy": "sliding_window",
+          "included_docs": 6,
+          "tokens_in": 124,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.001792
+        },
+        {
+          "policy": "summary",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.012667
+        },
+        {
+          "policy": "retrieval_topk",
+          "included_docs": 1,
+          "tokens_in": 24,
+          "context_recall": true,
+          "constraint_retention": false,
+          "success": false,
+          "latency_ms": 0.024041
+        },
+        {
+          "policy": "working_set",
+          "included_docs": 4,
+          "tokens_in": 107,
+          "context_recall": true,
+          "constraint_retention": true,
+          "success": true,
+          "latency_ms": 0.376166
+        }
+      ]
+    }
+  ],
+  "notes": "Synthetic internal fixtures; answer is simulated deterministically; policies are simulated at the context-selection layer. This is pipeline evidence, not a paper claim (see docs/research-plan.md §6)."
+}

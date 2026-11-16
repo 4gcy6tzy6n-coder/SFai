@@ -198,6 +198,31 @@ pub fn truncate_plain(s: &str, max_chars: usize) -> String {
     }
 }
 
+/// Wrap plain text by visual column width (CJK-aware) so box borders stay at a
+/// uniform width.
+pub fn wrap_plain_width(s: &str, max_cols: usize) -> Vec<String> {
+    if s.is_empty() {
+        return vec![String::new()];
+    }
+    let mut lines = Vec::new();
+    let mut current = String::new();
+    let mut cur_w = 0usize;
+    for ch in s.chars() {
+        let w = char_width(ch);
+        if cur_w + w > max_cols && !current.is_empty() {
+            lines.push(current);
+            current = String::new();
+            cur_w = 0;
+        }
+        current.push(ch);
+        cur_w += w;
+    }
+    if !current.is_empty() {
+        lines.push(current);
+    }
+    lines
+}
+
 /// Render a rounded Claude Code-style box (`╭─ title ───╮ ... ╰───────────╯`).
 pub fn render_box(title: &str, lines: &[String], min_inner_width: usize, theme: &Theme) -> String {
     let title_plain_len = if title.is_empty() {
@@ -514,6 +539,220 @@ pub fn render_prompt(
     };
     // Keep `sfai> ` token for script friendliness while styling it cleanly.
     format!("{}{}", prefix, theme.accent("sfai> "))
+}
+
+// ---- Bottom AI Chat Input Dialog Box & Multi-Turn Conversation Bubbles ----
+
+pub struct ChatComposerStatus<'a> {
+    pub active_task: Option<&'a str>,
+    pub perm_mode: PermissionMode,
+    pub model_label: &'a str,
+    pub constraints_count: usize,
+    pub turns_count: usize,
+    pub session_cost_usd: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChatTurn {
+    pub turn_index: usize,
+    pub task_id: String,
+    pub user_message: String,
+    pub ai_response: String,
+    pub status: TaskStatus,
+    pub steps: usize,
+    pub tool_calls: u64,
+    pub cost_usd: f64,
+}
+
+pub fn render_user_chat_bubble(turn: usize, message: &str, theme: &Theme) -> String {
+    let title = format!(
+        "{} {}",
+        theme.cyan("▸ You"),
+        theme.dim(&format!("· Turn #{turn}"))
+    );
+    let mut lines = Vec::new();
+    for raw in message.lines() {
+        lines.push(format!(
+            "{} {}",
+            theme.accent("❯"),
+            theme.bold(&truncate_plain(raw, 68))
+        ));
+    }
+    if lines.is_empty() {
+        lines.push(format!("{} {}", theme.accent("❯"), theme.bold(message)));
+    }
+    render_box(&title, &lines, 74, theme)
+}
+
+pub fn render_chat_history(turns: &[ChatTurn], theme: &Theme) -> String {
+    if turns.is_empty() {
+        return render_box(
+            &theme.accent("✻ AI Conversation History"),
+            &[theme.dim(
+                "No dialogue turns yet. Type any message in the bottom chat box to talk to sfai.",
+            )],
+            74,
+            theme,
+        );
+    }
+    let mut blocks = Vec::new();
+    for t in turns {
+        blocks.push(render_user_chat_bubble(
+            t.turn_index,
+            &t.user_message,
+            theme,
+        ));
+        let ai_title = format!(
+            "{} {} {}",
+            theme.accent("✻ sfai AI"),
+            theme.status_badge(t.status),
+            theme.dim(&format!("({})", t.task_id))
+        );
+        let mut ai_lines: Vec<String> = Vec::new();
+        for raw in t.ai_response.lines() {
+            for wrapped in wrap_plain_width(raw, 70) {
+                ai_lines.push(wrapped);
+            }
+        }
+        ai_lines.push(theme.dim(&format!(
+            "─── steps={} · tool_calls={} · cost=${:.6}",
+            t.steps, t.tool_calls, t.cost_usd
+        )));
+        blocks.push(render_box(&ai_title, &ai_lines, 74, theme));
+    }
+    blocks.join("\n")
+}
+
+pub fn render_chat_composer_status_bar(status: &ChatComposerStatus<'_>, theme: &Theme) -> String {
+    let task_str = status
+        .active_task
+        .map(|t| if t.len() > 14 { &t[..14] } else { t })
+        .unwrap_or("none");
+    let model_short = truncate_plain(status.model_label, 22);
+    format!(
+        "  {} {} · {} {} · {} {} · {} {} · {} {} · {}",
+        theme.accent("⏵⏵"),
+        status.perm_mode.badge(theme),
+        theme.dim("model:"),
+        theme.cyan(&model_short),
+        theme.dim("task:"),
+        theme.cyan(task_str),
+        theme.dim("turns:"),
+        status.turns_count,
+        theme.dim("cost:"),
+        theme.green(&format!("${:.6}", status.session_cost_usd)),
+        theme.dim("/help · /history · /quit")
+    )
+}
+
+/// Renders the Claude Code bottom AI chat input dialog box and reads one line
+/// of user input.
+///
+/// - In an interactive color TTY (`stdin` and `stdout` are terminals and
+///   `theme.color` is true), draws the complete 4-line framed input box +
+///   status bar first, then moves the cursor inside the box (`│ ❯ sfai> `) so
+///   the user types directly inside the dialog box at the bottom of the screen.
+/// - In piped / non-TTY or `--no-color` mode, prints the top frame + prompt,
+///   reads the line, and closes the bottom frame + status bar cleanly without
+///   emitting raw cursor-movement escape codes.
+pub fn read_chat_input_box(
+    status: &ChatComposerStatus<'_>,
+    theme: &Theme,
+) -> std::result::Result<Option<String>, String> {
+    use std::io::IsTerminal;
+    let inner_width = 74usize;
+    let title = format!(
+        "{} {}",
+        theme.accent("✻ Chat with sfai AI"),
+        theme.dim("(type message to talk, or /help for commands)")
+    );
+    let title_w = display_width(&title);
+    let top_dashes = (inner_width + 2).saturating_sub(title_w + 3);
+    let top_border = format!(
+        "{} {} {}",
+        theme.dim("╭─"),
+        title,
+        theme.dim(&format!("{}╮", "─".repeat(top_dashes)))
+    );
+    let bottom_border = theme.dim(&format!("╰{}╯", "─".repeat(inner_width + 2)));
+    let status_bar = render_chat_composer_status_bar(status, theme);
+
+    let is_tty = std::io::stdin().is_terminal() && std::io::stdout().is_terminal() && theme.color;
+
+    if is_tty {
+        let prompt_prefix = format!(
+            "{} {} {}",
+            theme.dim("│"),
+            theme.accent("❯"),
+            theme.accent("sfai>")
+        );
+        let prefix_w = display_width(&prompt_prefix);
+        let blank_pad = (inner_width + 1).saturating_sub(prefix_w);
+        let middle_line = format!(
+            "{}{}{}",
+            prompt_prefix,
+            " ".repeat(blank_pad),
+            theme.dim("│")
+        );
+        // Print the full 4-line dialog box + status bar at the bottom, then
+        // position the cursor inside the input line right after `│ ❯ sfai> `.
+        println!("{top_border}");
+        println!("{middle_line}");
+        println!("{bottom_border}");
+        print!("{status_bar}");
+        print!("\r\x1b[2A\x1b[{}C", prefix_w + 1);
+        std::io::stdout().flush().map_err(|e| e.to_string())?;
+
+        let mut line = String::new();
+        let read = std::io::stdin()
+            .lock()
+            .read_line(&mut line)
+            .map_err(|e| e.to_string())?;
+        // Move cursor below the bottom border and status bar before next output.
+        println!("\x1b[1B\r");
+        std::io::stdout().flush().map_err(|e| e.to_string())?;
+        if read == 0 {
+            return Ok(None);
+        }
+        Ok(Some(line))
+    } else {
+        let prompt_prefix = format!(
+            "{} {} {} ",
+            theme.dim("│"),
+            theme.accent("❯"),
+            theme.accent("sfai>")
+        );
+        let prefix_w = display_width(&prompt_prefix);
+        println!("{top_border}");
+        print!("{prompt_prefix}");
+        std::io::stdout().flush().map_err(|e| e.to_string())?;
+
+        let mut line = String::new();
+        let read = std::io::stdin()
+            .lock()
+            .read_line(&mut line)
+            .map_err(|e| e.to_string())?;
+        if read == 0 {
+            let pad = (inner_width + 3).saturating_sub(prefix_w);
+            println!("{}{}", " ".repeat(pad), theme.dim("│"));
+            println!("{bottom_border}");
+            println!("{status_bar}");
+            return Ok(None);
+        }
+        let trimmed = line.trim_end_matches(&['\r', '\n'][..]);
+        let shown = truncate_plain(trimmed, (inner_width + 2).saturating_sub(prefix_w));
+        let shown_w = display_width(&shown);
+        let pad = (inner_width + 3).saturating_sub(prefix_w + shown_w);
+        println!(
+            "{}{}{}",
+            theme.bold(&shown),
+            " ".repeat(pad),
+            theme.dim("│")
+        );
+        println!("{bottom_border}");
+        println!("{status_bar}");
+        Ok(Some(line))
+    }
 }
 
 // ---- Claude Code Live Step Observer ----
@@ -913,13 +1152,22 @@ pub fn render_markdown_block(text: &str, theme: &Theme) -> String {
             .strip_prefix("- ")
             .or_else(|| trimmed.strip_prefix("* "))
         {
-            out.push(format!(
-                "  {} {}",
-                theme.accent("•"),
-                highlight_refs(item, theme)
-            ));
+            let wrapped = wrap_plain_width(item, 68);
+            for (idx, wline) in wrapped.iter().enumerate() {
+                if idx == 0 {
+                    out.push(format!(
+                        "  {} {}",
+                        theme.accent("•"),
+                        highlight_refs(wline, theme)
+                    ));
+                } else {
+                    out.push(format!("    {}", highlight_refs(wline, theme)));
+                }
+            }
         } else {
-            out.push(format!("  {}", highlight_refs(raw_line, theme)));
+            for wline in wrap_plain_width(raw_line, 70) {
+                out.push(format!("  {}", highlight_refs(&wline, theme)));
+            }
         }
     }
     out.join("\n")
@@ -952,12 +1200,18 @@ pub fn render_run_summary(result: &TaskRunResult, theme: &Theme) -> String {
 
     if let Some(answer) = &result.answer {
         if !answer.trim().is_empty() {
-            sections.push(format!(
-                "\n  {} {}\n{}",
+            let formatted = render_markdown_block(answer, theme);
+            let box_lines: Vec<String> = formatted
+                .lines()
+                .map(|l| l.trim_start().to_string())
+                .collect();
+            let title = format!(
+                "{} {} · {}",
                 theme.accent("✻"),
-                theme.bold("Response"),
-                render_markdown_block(answer, theme)
-            ));
+                theme.bold("Response (sfai AI)"),
+                theme.status_badge(result.status)
+            );
+            sections.push(format!("\n{}", render_box(&title, &box_lines, 74, theme)));
         }
     }
 
@@ -1629,11 +1883,21 @@ pub fn render_doctor_card(app: &App, perm_mode: PermissionMode, theme: &Theme) -
 
 pub fn render_help_card(theme: &Theme) -> String {
     let lines = vec![
-        theme.bold("Execution & Routing"),
+        theme.bold("Execution & AI Conversation"),
         format!(
             "  {:<28} {}",
-            theme.cyan("<type any goal>"),
-            "Run a goal through the self-routing decision kernel"
+            theme.cyan("<type any message>"),
+            "Talk directly with sfai AI via the self-routing decision kernel"
+        ),
+        format!(
+            "  {:<28} {}",
+            theme.cyan("/history"),
+            "Show multi-turn User <-> AI conversation dialog history"
+        ),
+        format!(
+            "  {:<28} {}",
+            theme.cyan("/model [auto|offline|online]"),
+            "View or switch AI model adapter mode for the chat box"
         ),
         format!(
             "  {:<28} {}",
