@@ -33,21 +33,32 @@
 
 ## 4. E5-gate CI 真实跑（DeepSeek，n=16/cell）
 
-`experiments/configs/deepseek-e5-gate-ci.json`（long-horizon + edge-case ×
-none/no_verification × 4 任务 × 4 重复 = 64 运行）执行中，结果落盘后并入
-`experiments/analysis/pillar-evidence-strengthening.md`。
+`experiments/configs/deepseek-e5-gate-ci.json`（64 运行）已完成：
+
+| suite | ablation | n | success | correct | false-success (95% CI) |
+|---|---|---|---|---|---|
+| long-horizon | none | 16 | 0.94 | 1.00 | **0.00 [0.00,0.19]** |
+| long-horizon | no_verification | 16 | 1.00 | 0.62 | **0.38 [0.18,0.61]** |
+| edge-case | none | 16 | 0.00 | 0.00 | **0.00 [0.00,0.19]** |
+| edge-case | no_verification | 16 | 0.38 | 0.00 | **0.38 [0.18,0.61]** |
+
+假成功 CI 基本分离（0.00 上界 0.19 vs 0.38 下界 0.18）。附带 router 实证：
+edge-case 捏造压力下 ask_user 率 0.94（有验证）/ 0.62（无验证）——真实模型自发
+使用自路由 ask_user 意图。Routing quality 报表首次进入真实实验（steps/tool calls/
+misroutes/ask_user）。
 
 ## 5. 回归验证
 
 - `cargo test --release`：**99 passed / 0 failed**（新增 `tests/eval.rs` 2 个：
   sweep 覆盖预算/规模、门全捕获零误杀）
+- E5-gate CI：64 真实运行完成，假成功 CI 分离；Routing quality 报表在真实实验中可用
 - clippy 0 告警；fmt clean
 
 ## 6. 遗留项
 
 1. working_set 失守边界（预算 <41 token）未扫（v2 补 10/25 档）。
-2. 门矩阵的失败模式为构造样本；真实模型坏交付物的捕获由 E1/E2/E4 真实数据支撑。
-3. 修复收敛率（blocked→修复→完成）建议从 E5-gate CI trace 提取（下一步）。
+2. 修复收敛率（blocked→修复→完成）建议从 E5-gate CI trace 提取（下一步）。
+3. E8 自路由 vs 固定管线消融（router 柱子的最后一块）。
 
 ## 7. 判定
 
