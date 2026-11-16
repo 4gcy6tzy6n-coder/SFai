@@ -56,6 +56,14 @@ simulation (which the `sfai eval` harness already covers).
 - Latencies are machine-specific; reports must include hardware and treat
   absolute numbers as relative indicators.
 
+## v0.2 addendum (repetitions, seeds, confidence intervals)
+
+`BENCH_VERSION` bumped to 0.2.0. Added `--repetitions`, `--seed`, and JSON
+experiment configs (`BenchConfig`); rates now carry Wilson 95% CIs and
+latency/cost carry mean ± 1.96·std/√n. Seeds shift dataset totals and the
+long-horizon needle position, so repetitions sample both model and instance
+variance. Determinism tests exclude latency-derived fields only.
+
 ## Consequences
 
 - The protocol is frozen; any suite or metric change bumps `BENCH_VERSION` and

@@ -1,0 +1,13 @@
+{
+  "name": "e4-deepseek-ablations",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "price_in": 0.27,
+  "price_out": 1.10,
+  "suites": ["dataset", "long-horizon"],
+  "ablations": ["none", "full_context", "no_pinned", "no_verification", "no_wiki"],
+  "size": 2,
+  "repetitions": 2,
+  "seed": 0,
+  "note": "E4: framework ablations with a real model (cost/latency/false-success)"
+}

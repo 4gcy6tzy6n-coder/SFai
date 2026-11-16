@@ -1,6 +1,6 @@
 # Agent Framework Benchmark — v0.1 specification
 
-**Status:** v0.1 (2026-11-16). Protocol is frozen for v1 real-model runs.
+**Status:** v0.2 (2026-11-16). Protocol frozen for v1 real-model runs; v0.2 adds repetitions, seeds and 95% confidence intervals.
 **Purpose:** a reproducible "Agent Artificial Analysis"-style benchmark for
 agent frameworks: **time**, **task completion**, **ground-truth correctness**,
 **token spend**, **cost**, **ablations** — measured end-to-end through the real
@@ -45,9 +45,14 @@ correct framework must retrieve it).
 ## 4. Protocol and reproducibility
 
 - Every task runs in a fresh temporary storage root (isolated SQLite/blobs/workspaces).
-- Deterministic scripted models; identical inputs produce identical metrics
-  (wall-clock latency is the only non-deterministic field and is excluded from
-  equality tests).
+- **Repetitions and seeds:** `--repetitions N` repeats every task with a fresh
+  storage and a shifted seed (`seed + repetition`), which also varies dataset
+  totals and the long-horizon needle position. Real-model runs should use N ≥ 2.
+- **Confidence intervals:** rates use Wilson intervals; latency/cost use
+  mean ± 1.96·std/√n (n ≥ 2). Reports carry both the raw per-run rows and the
+  aggregate intervals.
+- Deterministic scripted models; identical inputs produce identical aggregate
+  metrics apart from wall-clock latency (excluded from equality tests).
 - Fixed budgets (default 20 tool calls), fixed model per suite, fixed seeds.
 - CLI: `sfai bench [--suite ...] [--ablation ...] [--size N] [--out PATH]`
   prints Markdown and writes JSON.
@@ -55,17 +60,16 @@ correct framework must retrieve it).
   scripted producer. v1 repeats the same suites with a hosted model through the
   provider adapter (≥5 seeds, confidence intervals).
 
-## 5. v0.1 baseline (4 tasks per suite; archived in `evals/reports/`)
+## 5. v0.2 baseline (4 tasks per suite, 1 repetition; archived in `evals/reports/`)
 
-| suite | ablation | success | correct | false-success | p50 ms | p95 ms | in tokens | out tokens | cost USD |
+| suite | ablation | success [95% CI] | correct [95% CI] | false-success | p50 ms | p95 ms | in tokens | out tokens | cost USD |
 |---|---|---|---|---|---|---|---|---|---|
-| tool-use | none | 1.00 | 1.00 | 0.00 | 4.2 | 4.3 | 1062 | 254 | 0.001824 |
-| tool-use | no_wiki | 1.00 | 1.00 | 0.00 | 3.1 | 3.2 | 1062 | 254 | 0.001824 |
-| dataset | none | 1.00 | 1.00 | 0.00 | 4.0 | 4.0 | 494 | 88 | 0.000758 |
-| long-horizon | none | 1.00 | 1.00 | 0.00 | 9.7 | 10.1 | 2243 | 200 | 0.002843 |
-| long-horizon | full_context | 1.00 | 1.00 | 0.00 | 12.4 | 12.9 | 4843 | 200 | 0.005443 |
-| edge-case | none | 0.00 | 1.00 | 0.00 | 5.9 | 6.2 | 1175 | 164 | 0.001667 |
-| edge-case | no_verification | 1.00 | 1.00 | 1.00 | 3.2 | 3.6 | 465 | 96 | 0.000753 |
+| tool-use | none | 1.00 [0.51,1.00] | 1.00 [0.51,1.00] | 0.00 | 7.0 | 7.7 | 1072 | 258 | 0.001846 |
+| dataset | none | 1.00 [0.51,1.00] | 1.00 [0.51,1.00] | 0.00 | 3.7 | 3.8 | 498 | 88 | 0.000762 |
+| long-horizon | none | 1.00 [0.51,1.00] | 1.00 [0.51,1.00] | 0.00 | 8.9 | 9.3 | 2260 | 202 | 0.002866 |
+| long-horizon | full_context | 1.00 [0.51,1.00] | 1.00 [0.51,1.00] | 0.00 | 11.3 | 11.4 | 4859 | 202 | 0.005465 |
+| edge-case | none | 0.00 [0.00,0.49] | 1.00 [0.51,1.00] | 0.00 | 6.1 | 6.5 | 1183 | 164 | 0.001675 |
+| edge-case | no_verification | 1.00 [0.51,1.00] | 1.00 [0.51,1.00] | 1.00 | 3.6 | 3.6 | 469 | 96 | 0.000757 |
 
 Reading: full-context costs ~2.2× the input tokens of the governed envelope on
 long-horizon; removing the verification gate turns the deliberately broken

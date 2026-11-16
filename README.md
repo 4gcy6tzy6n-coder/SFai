@@ -57,6 +57,8 @@ cargo run -- wiki summary <task_id>             # M4 derived knowledge
 cargo run -- skills list --skills skills         # M5 skill discovery (metadata only)
 cargo run -- eval --size 12                      # M8 offline evaluation harness
 cargo run -- bench --size 4                     # agent framework benchmark (all suites/ablations)
+cargo run -- bench --config experiments/configs/deepseek-e1.json   # experiment config (needs key)
+cargo run -- bench --repetitions 3 --seed 0     # repeated runs + 95% CIs
 cargo run -- bench --suite dataset --ablation none --out /tmp/bench.json
 ```
 

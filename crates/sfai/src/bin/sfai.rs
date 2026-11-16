@@ -129,6 +129,15 @@ enum Cmd {
         ablation: String,
         #[arg(long, default_value_t = 6)]
         size: usize,
+        /// Repetitions per task (fresh storage; seeds shift by repetition)
+        #[arg(long, default_value_t = 1)]
+        repetitions: usize,
+        /// Base seed for task generation and repetitions
+        #[arg(long, default_value_t = 0)]
+        seed: u64,
+        /// JSON experiment config (suites/ablations/size/repetitions/seed/provider)
+        #[arg(long)]
+        config: Option<PathBuf>,
         /// Write the JSON report to this path (default: <storage>/benchmarks/report-<ts>.json)
         #[arg(long)]
         out: Option<PathBuf>,
@@ -533,9 +542,12 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
             suite,
             ablation,
             size,
+            repetitions,
+            seed,
+            config,
             out,
         } => {
-            let suites: Vec<String> = if suite == "all" {
+            let mut suites: Vec<String> = if suite == "all" {
                 sfai::benchmark::SUITES
                     .iter()
                     .map(|s| s.to_string())
@@ -543,7 +555,7 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
             } else {
                 suite.split(',').map(|s| s.trim().to_string()).collect()
             };
-            let ablations: Vec<String> = if ablation == "all" {
+            let mut ablations: Vec<String> = if ablation == "all" {
                 sfai::benchmark::ABLATIONS
                     .iter()
                     .map(|s| s.to_string())
@@ -551,6 +563,30 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
             } else {
                 ablation.split(',').map(|s| s.trim().to_string()).collect()
             };
+            let mut size = size;
+            let mut repetitions = repetitions;
+            let mut seed = seed;
+            let mut config_provider: Option<String> = None;
+            let mut config_model: Option<String> = None;
+            let mut config_price_in: Option<f64> = None;
+            let mut config_price_out: Option<f64> = None;
+            let mut config_obj: Option<sfai::benchmark::BenchConfig> = None;
+            if let Some(path) = config {
+                let text = std::fs::read_to_string(&path)
+                    .map_err(|e| format!("cannot read config {}: {e}", path.display()))?;
+                let cfg: sfai::benchmark::BenchConfig = serde_json::from_str(&text)
+                    .map_err(|e| format!("invalid benchmark config: {e}"))?;
+                suites = cfg.suites.clone();
+                ablations = cfg.ablations.clone();
+                size = cfg.size;
+                repetitions = cfg.repetitions;
+                seed = cfg.seed;
+                config_provider = cfg.provider.clone();
+                config_model = cfg.model.clone();
+                config_price_in = cfg.price_in;
+                config_price_out = cfg.price_out;
+                config_obj = Some(cfg);
+            }
             for s in &suites {
                 if !sfai::benchmark::SUITES.contains(&s.as_str()) {
                     return Err(format!(
@@ -567,28 +603,43 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
                     ));
                 }
             }
+            let provider_name = cli.provider.clone().or(config_provider);
+            let model_name = cli.model.clone().or(config_model);
+            let price_in = cli.price_in.or(config_price_in);
+            let price_out = cli.price_out.or(config_price_out);
             let profile = match sfai::integrations::providers::profiles::resolve_for_cli(
-                cli.provider.as_deref(),
-                cli.model.as_deref(),
-                cli.price_in,
-                cli.price_out,
+                provider_name.as_deref(),
+                model_name.as_deref(),
+                price_in,
+                price_out,
             ) {
                 Ok(p) => Some(p),
-                Err(_) if cli.provider.is_none() => None,
+                Err(_) if provider_name.is_none() => None,
                 Err(e) => return Err(e.to_string()),
             };
-            let report = sfai::benchmark::run_benchmark_with_provider(
-                &suites,
-                &ablations,
-                size,
-                profile.as_ref(),
-            );
+            let report = if let Some(cfg) = &config_obj {
+                sfai::benchmark::run_from_config(cfg, profile.as_ref())
+            } else {
+                sfai::benchmark::run_benchmark_full(
+                    &suites,
+                    &ablations,
+                    size,
+                    repetitions,
+                    seed,
+                    profile.as_ref(),
+                )
+            };
             println!("{}", report.render_markdown());
             let stamp = report.generated_at.replace([':', '.'], "-");
+            let name = report
+                .config
+                .as_ref()
+                .map(|c| c.name.clone())
+                .unwrap_or_else(|| "report".to_string());
             let path = out.unwrap_or_else(|| {
                 cli.storage
                     .join("benchmarks")
-                    .join(format!("report-{stamp}.json"))
+                    .join(format!("{name}-{stamp}.json"))
             });
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;

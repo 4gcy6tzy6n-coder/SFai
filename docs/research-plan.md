@@ -78,7 +78,10 @@ verification, retries and wall-clock must be charged.
 3. **v2: ablations + Wiki/Skill integration.** Turn on/off Wiki compilation,
    graph edges, pinned constraints, verification; measure both quality and
    cost.
-4. **v3: paper-scale.** Public reproducible tasks plus internal fixtures,
+4. **Experiment registry.** Executable configs live in `experiments/configs/`
+   (E1 DeepSeek baseline, E2 provider comparison, E4 ablations); protocol and
+   controls in `docs/experiments/README.md`; runner: `scripts/run_experiments.sh`.
+5. **v3: paper-scale.** Public reproducible tasks plus internal fixtures,
    independent acceptance checks (never the same model's self-assessment),
    negative results retained, full artifact release.
 

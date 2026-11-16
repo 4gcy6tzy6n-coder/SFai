@@ -65,6 +65,11 @@ impl Theme {
         self.wrap("38;5;209;1", text)
     }
 
+    /// sfai brand royal blue (matching the 3-node curved chevron logo).
+    pub fn brand_blue(&self, text: &str) -> String {
+        self.wrap("38;5;27;1", text)
+    }
+
     pub fn bold(&self, text: &str) -> String {
         self.wrap("1", text)
     }
@@ -503,12 +508,12 @@ pub fn detect_terminal_size() -> (usize, usize) {
     (100, 26)
 }
 
-/// Renders the Claude Code top-left pixel mascot + 3-line borderless dashboard
-/// header (matching the Claude Code frontend screenshot).
+/// Renders the sfai top-left 3-node curved-arc logo + 3-line borderless
+/// dashboard header.
 pub fn render_top_dashboard(info: &DashboardInfo<'_>, theme: &Theme) -> String {
-    let m1 = theme.accent(" ▐▛███▜▌ ");
-    let m2 = theme.accent("▝▜█████▛▘");
-    let m3 = theme.accent("  ▘▘ ▝▝  ");
+    let m1 = theme.brand_blue(" ●▀▀▄   ");
+    let m2 = theme.brand_blue("    ●   ");
+    let m3 = theme.brand_blue(" ●▄▄▀   ");
 
     let task_badge = match (info.active_task, info.active_status) {
         (Some(tid), Some(st)) => {

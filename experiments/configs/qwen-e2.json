@@ -1,0 +1,13 @@
+{
+  "name": "e2-qwen-baseline",
+  "provider": "qwen",
+  "model": "qwen-plus",
+  "price_in": 0.40,
+  "price_out": 1.20,
+  "suites": ["tool-use", "dataset", "long-horizon", "edge-case"],
+  "ablations": ["none", "no_verification"],
+  "size": 3,
+  "repetitions": 2,
+  "seed": 0,
+  "note": "E2: provider comparison baseline (Qwen plus, DashScope compatible mode)"
+}

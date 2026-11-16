@@ -1,7 +1,10 @@
 //! Benchmark tests: dataset correctness, false-success under ablated
 //! verification, determinism, report rendering.
 
-use sfai::benchmark::{run_benchmark, BenchReport, BenchSuiteMetrics};
+use sfai::benchmark::{
+    generate_tasks_seeded, run_benchmark, run_benchmark_full, run_from_config, BenchConfig,
+    BenchReport, BenchSuiteMetrics,
+};
 
 fn metric<'a>(report: &'a BenchReport, suite: &str, ablation: &str) -> &'a BenchSuiteMetrics {
     report
@@ -21,6 +24,8 @@ fn normalize(report: &BenchReport) -> Vec<String> {
                 obj.remove("mean_latency_ms");
                 obj.remove("p50_latency_ms");
                 obj.remove("p95_latency_ms");
+                obj.remove("std_latency_ms");
+                obj.remove("ci95_latency_ms");
             }
             v.to_string()
         })
@@ -82,7 +87,7 @@ fn report_renders_all_suites_and_ablations() {
     assert!(markdown.contains("no_wiki"));
     assert!(markdown.contains("false-success"));
     assert!(report.to_json().contains("\"metrics\""));
-    assert_eq!(report.version, "0.1.0");
+    assert_eq!(report.version, "0.2.0");
 }
 
 #[test]
@@ -91,4 +96,70 @@ fn long_horizon_recovers_needle_end_to_end() {
     let m = metric(&report, "long-horizon", "none");
     assert_eq!(m.success_rate, 1.0);
     assert_eq!(m.correctness, 1.0);
+}
+
+#[test]
+fn repetitions_expand_runs_and_metrics() {
+    let report = run_benchmark_full(
+        &["dataset".to_string()],
+        &["none".to_string()],
+        2,
+        2,
+        7,
+        None,
+    );
+    assert_eq!(report.repetitions, 2);
+    assert_eq!(report.seed, 7);
+    let m = metric(&report, "dataset", "none");
+    assert_eq!(m.tasks, 4, "2 tasks × 2 repetitions");
+    assert_eq!(m.repetitions, 2);
+    let seeds: Vec<u64> = report.tasks.iter().map(|t| t.seed).collect();
+    assert!(seeds.contains(&7) && seeds.contains(&8));
+}
+
+#[test]
+fn confidence_intervals_are_sane() {
+    let report = run_benchmark_full(
+        &["dataset".to_string()],
+        &["none".to_string()],
+        3,
+        2,
+        0,
+        None,
+    );
+    let m = metric(&report, "dataset", "none");
+    assert!(
+        m.success_ci95[0] <= m.success_rate + 1e-9 && m.success_rate <= m.success_ci95[1] + 1e-9,
+        "success ci={:?} rate={}",
+        m.success_ci95,
+        m.success_rate
+    );
+    assert!(
+        m.correctness_ci95[0] <= m.correctness + 1e-9
+            && m.correctness <= m.correctness_ci95[1] + 1e-9,
+        "correctness ci={:?} rate={}",
+        m.correctness_ci95,
+        m.correctness
+    );
+    assert!(m.ci95_latency_ms >= 0.0);
+    assert!(m.ci95_cost_usd >= 0.0);
+}
+
+#[test]
+fn seeds_vary_task_instances() {
+    let a = generate_tasks_seeded("dataset", 1, 0);
+    let b = generate_tasks_seeded("dataset", 1, 1);
+    assert_ne!(a[0].ground_truth, b[0].ground_truth);
+}
+
+#[test]
+fn config_parses_and_runs() {
+    let cfg: BenchConfig = serde_json::from_str(
+        r#"{"name":"e1-baseline","suites":["dataset"],"ablations":["none"],"size":1,"repetitions":1,"seed":3}"#,
+    )
+    .unwrap();
+    let report = run_from_config(&cfg, None);
+    assert_eq!(report.config.as_ref().unwrap().name, "e1-baseline");
+    assert_eq!(report.seed, 3);
+    assert_eq!(report.repetitions, 1);
 }

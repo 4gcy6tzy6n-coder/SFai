@@ -1,0 +1,10 @@
+{
+  "name": "e2-mimo-baseline",
+  "provider": "mimo",
+  "suites": ["tool-use", "dataset", "long-horizon", "edge-case"],
+  "ablations": ["none", "no_verification"],
+  "size": 3,
+  "repetitions": 2,
+  "seed": 0,
+  "note": "E2: provider comparison baseline (Xiaomi MiMo; set XIAOMI_MIMO_BASE_URL/MODEL/API_KEY and prices)"
+}
