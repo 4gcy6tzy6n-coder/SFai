@@ -99,6 +99,18 @@ Limitations that must be stated in any write-up:
 - results establish that the measurement pipeline works and that pinned
   constraints behave as designed — **not** evidence of a paper contribution.
 
+## 6.5 Positioning (revised after gap analysis + E6 overhead measurements)
+
+**Primary contribution: a complete, auditable agent runtime + benchmark
+("Agent Artificial Analysis"-style), engineered in Rust.** The unit of
+comparison is the *whole pipeline* (self-routing kernel, index-native context,
+runtime-enforced verification, multi-provider, CLI/UI/dmg, benchmark with
+false-success metric), not a single algorithm. Speed claims are scoped
+honestly (E6): parity per-task overhead at equal guarantees, 2–3× cold start,
+5× large-envelope serialization, 10×+ distribution size, concurrency TBD (E6b).
+Secondary: the verification-gate / false-success quantification across models
+(E1/E2/E4) and sparse-context cost evidence (E4) as empirical findings.
+
 ## 7. Paper gate (do not freeze a claim until all hold)
 
 - the method is described mathematically and differs materially from known
