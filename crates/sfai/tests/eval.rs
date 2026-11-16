@@ -109,3 +109,42 @@ fn cost_per_success_is_consistent() {
         }
     }
 }
+
+#[test]
+fn sweep_covers_budgets_and_scale() {
+    let report = sfai::eval::run_sweep(&[50, 400, 3200], &[40, 160], 2);
+    assert_eq!(report.points.len(), 3 * 2 * 3);
+    let ws_flat: Vec<&sfai::eval::SweepPoint> = report
+        .points
+        .iter()
+        .filter(|p| p.policy == "working_set" && p.budget_tokens == 50)
+        .collect();
+    assert_eq!(ws_flat.len(), 2);
+    for p in &ws_flat {
+        assert_eq!(p.success_rate, 1.0);
+        assert!(p.mean_tokens < 100.0, "sparse cost is flat vs history size");
+    }
+    let full: Vec<&sfai::eval::SweepPoint> = report
+        .points
+        .iter()
+        .filter(|p| p.policy == "full_history")
+        .collect();
+    let h40 = full.iter().find(|p| p.history_len == 40).unwrap();
+    let h160 = full.iter().find(|p| p.history_len == 160).unwrap();
+    assert!(
+        h160.mean_tokens > 3.5 * h40.mean_tokens,
+        "full history grows linearly with scale"
+    );
+}
+
+#[test]
+fn gate_catches_all_failure_modes_without_false_kills() {
+    let dir = tempfile::tempdir().expect("tmp");
+    let report = sfai::eval::run_gate_metrics(dir.path()).expect("gate");
+    for (mode, rate) in &report.catch_rate_per_mode {
+        assert_eq!(*rate, 1.0, "mode {mode} must be caught");
+    }
+    assert_eq!(report.false_kill_rate, 0.0);
+    assert_eq!(report.good_pass_rate, 1.0);
+    assert!(!report.cases.is_empty());
+}

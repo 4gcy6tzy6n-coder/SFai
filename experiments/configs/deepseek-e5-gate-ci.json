@@ -1,0 +1,13 @@
+{
+  "name": "e5-gate-ci-deepseek",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "price_in": 0.27,
+  "price_out": 1.10,
+  "suites": ["long-horizon", "edge-case"],
+  "ablations": ["none", "no_verification"],
+  "size": 4,
+  "repetitions": 4,
+  "seed": 42,
+  "note": "E5-gate: tighten false-success CIs (n=16/cell) on the verification-gate contrast"
+}

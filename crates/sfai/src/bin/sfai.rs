@@ -153,6 +153,15 @@ enum Cmd {
         /// Write the JSON report to this path (default: <storage>/evals/report-<ts>.json)
         #[arg(long)]
         out: Option<PathBuf>,
+        /// Report mode: suite (default) | sweep (E5 budget/scale curves) | gate (verification-gate quality)
+        #[arg(long, default_value = "suite")]
+        mode: String,
+        /// sweep: comma budgets (tokens), e.g. 50,100,200,400,800,1600,3200
+        #[arg(long, default_value = "50,100,200,400,800,1600,3200")]
+        budgets: String,
+        /// sweep: comma history sizes, e.g. 40,80,160
+        #[arg(long, default_value = "40,80,160")]
+        history: String,
     },
     /// Serve the local HTTP API for the UI (tasks, events/SSE, artifacts, wiki)
     Serve {
@@ -678,19 +687,65 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
             size,
             budget,
             out,
+            mode,
+            budgets,
+            history,
         } => {
-            let report = sfai::eval::run_suite(&suite, size, budget);
-            println!("{}", report.render_markdown());
-            let stamp = report.generated_at.replace([':', '.'], "-");
+            let (markdown, json_text, stamp, default_name) = match mode.as_str() {
+                "suite" => {
+                    let report = sfai::eval::run_suite(&suite, size, budget);
+                    (
+                        report.render_markdown(),
+                        report.to_json(),
+                        report.generated_at.replace([':', '.'], "-"),
+                        "report".to_string(),
+                    )
+                }
+                "sweep" => {
+                    let budgets: Vec<usize> = budgets
+                        .split(',')
+                        .map(|b| b.trim().parse().map_err(|e| format!("bad budget {b}: {e}")))
+                        .collect::<Result<_, _>>()
+                        .map_err(|e: String| e)?;
+                    let history: Vec<usize> = history
+                        .split(',')
+                        .map(|h| {
+                            h.trim()
+                                .parse()
+                                .map_err(|e| format!("bad history {h}: {e}"))
+                        })
+                        .collect::<Result<_, _>>()
+                        .map_err(|e: String| e)?;
+                    let report = sfai::eval::run_sweep(&budgets, &history, size);
+                    (
+                        report.render_markdown(),
+                        report.to_json(),
+                        report.generated_at.replace([':', '.'], "-"),
+                        "e5-sweep".to_string(),
+                    )
+                }
+                "gate" => {
+                    let report =
+                        sfai::eval::run_gate_metrics(&cli.storage).map_err(|e| e.to_string())?;
+                    (
+                        report.render_markdown(),
+                        report.to_json(),
+                        report.generated_at.replace([':', '.'], "-"),
+                        "gate-metrics".to_string(),
+                    )
+                }
+                other => return Err(format!("unknown eval mode {other:?}; use suite|sweep|gate")),
+            };
+            println!("{markdown}");
             let path = out.unwrap_or_else(|| {
                 cli.storage
                     .join("evals")
-                    .join(format!("report-{stamp}.json"))
+                    .join(format!("{default_name}-{stamp}.json"))
             });
             if let Some(parent) = path.parent() {
                 std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
             }
-            std::fs::write(&path, report.to_json()).map_err(|e| e.to_string())?;
+            std::fs::write(&path, json_text).map_err(|e| e.to_string())?;
             eprintln!("report written to {}", path.display());
             Ok(0)
         }

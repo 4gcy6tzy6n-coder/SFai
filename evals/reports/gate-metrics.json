@@ -1,0 +1,133 @@
+{
+  "generated_at": "2026-11-16T11:48:27.393445+00:00",
+  "cases": [
+    {
+      "label": "good_report-0",
+      "verdict": "pass",
+      "caught": false,
+      "error_code": ""
+    },
+    {
+      "label": "good_report-1",
+      "verdict": "pass",
+      "caught": false,
+      "error_code": ""
+    },
+    {
+      "label": "good_report-2",
+      "verdict": "pass",
+      "caught": false,
+      "error_code": ""
+    },
+    {
+      "label": "good_report-3",
+      "verdict": "pass",
+      "caught": false,
+      "error_code": ""
+    },
+    {
+      "label": "broken_citation-0",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "BROKEN_CITATION_REF"
+    },
+    {
+      "label": "broken_citation-1",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "BROKEN_CITATION_REF"
+    },
+    {
+      "label": "broken_citation-2",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "BROKEN_CITATION_REF"
+    },
+    {
+      "label": "broken_citation-3",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "BROKEN_CITATION_REF"
+    },
+    {
+      "label": "zero_citation-0",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "NO_CITATIONS_FOUND"
+    },
+    {
+      "label": "zero_citation-1",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "NO_CITATIONS_FOUND"
+    },
+    {
+      "label": "zero_citation-2",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "NO_CITATIONS_FOUND"
+    },
+    {
+      "label": "zero_citation-3",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "NO_CITATIONS_FOUND"
+    },
+    {
+      "label": "placeholder_text-0",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "PLACEHOLDER_TEXT_FOUND"
+    },
+    {
+      "label": "placeholder_text-1",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "PLACEHOLDER_TEXT_FOUND"
+    },
+    {
+      "label": "placeholder_text-2",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "PLACEHOLDER_TEXT_FOUND"
+    },
+    {
+      "label": "placeholder_text-3",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "PLACEHOLDER_TEXT_FOUND"
+    },
+    {
+      "label": "wrong_answer-0",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "GROUND_TRUTH_MISMATCH"
+    },
+    {
+      "label": "wrong_answer-1",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "GROUND_TRUTH_MISMATCH"
+    },
+    {
+      "label": "wrong_answer-2",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "GROUND_TRUTH_MISMATCH"
+    },
+    {
+      "label": "wrong_answer-3",
+      "verdict": "fail",
+      "caught": true,
+      "error_code": "GROUND_TRUTH_MISMATCH"
+    }
+  ],
+  "catch_rate_per_mode": {
+    "broken_citation": 1.0,
+    "placeholder_text": 1.0,
+    "wrong_answer": 1.0,
+    "zero_citation": 1.0
+  },
+  "false_kill_rate": 0.0,
+  "good_pass_rate": 1.0
+}

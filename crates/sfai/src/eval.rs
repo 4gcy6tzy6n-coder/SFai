@@ -11,6 +11,7 @@ use crate::context::retrieval::SearchCandidate;
 use crate::context::working_set::compile_working_set;
 use crate::storage::event_ledger::now;
 use serde::Serialize;
+use std::collections::BTreeMap;
 use std::time::Instant;
 
 pub const DEFAULT_SUITE: &str = "sparse-context";
@@ -379,6 +380,325 @@ pub fn run_suite(suite: &str, size: usize, budget: usize) -> EvalReport {
                 claim (see docs/research-plan.md §6)."
             .to_string(),
     }
+}
+
+// ---- E5: budget/scale sweep (sparse-activation Pareto curves) ----
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SweepPoint {
+    pub policy: String,
+    pub history_len: usize,
+    pub budget_tokens: usize,
+    pub success_rate: f64,
+    pub correctness: f64,
+    pub constraint_retention: f64,
+    pub mean_tokens: f64,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct SweepReport {
+    pub generated_at: String,
+    pub points: Vec<SweepPoint>,
+}
+
+impl SweepReport {
+    pub fn render_markdown(&self) -> String {
+        let mut out = String::new();
+        out.push_str("# E5 — sparse activation sweep (quality vs budget vs scale)\n\n");
+        out.push_str(&format!("- generated_at: {}\n\n", self.generated_at));
+        out.push_str(
+            "| policy | history | budget | success | correct | constraint kept | mean tokens |\n",
+        );
+        out.push_str("|---|---|---|---|---|---|---|\n");
+        for p in &self.points {
+            out.push_str(&format!(
+                "| {} | {} | {} | {:.2} | {:.2} | {:.2} | {:.1} |\n",
+                p.policy,
+                p.history_len,
+                p.budget_tokens,
+                p.success_rate,
+                p.correctness,
+                p.constraint_retention,
+                p.mean_tokens
+            ));
+        }
+        out
+    }
+
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(self).unwrap_or_else(|_| "{}".to_string())
+    }
+}
+
+pub fn generate_suite_sized(size: usize, history_len: usize) -> Vec<EvalScenario> {
+    (0..size)
+        .map(|i| {
+            let needle_pos = history_len * 2 / 5;
+            let marker = format!("NEEDLE-{i:02}-MARKER");
+            let mut history = Vec::new();
+            for d in 0..history_len {
+                let body = if d == needle_pos {
+                    format!(
+                        "Critical finding {marker}: the retention figure is {}% and the policy is sparse-context.",
+                        40 + i
+                    )
+                } else if d == 0 {
+                    format!(
+                        "Task constraints: final output must cite the earlier finding; keep the answer under 80 words. (session {i})"
+                    )
+                } else {
+                    format!(
+                        "Routine note {d} for session {i}: intermediate observations, no material finding yet."
+                    )
+                };
+                history.push(Doc {
+                    id: format!("note-{i:02}-{d:03}"),
+                    title: format!("Note {d}"),
+                    body,
+                });
+            }
+            EvalScenario {
+                id: format!("scenario-{i:02}"),
+                goal: format!(
+                    "Report the retention figure from the earlier findings ({marker})."
+                ),
+                constraints: vec![
+                    "final output must cite the earlier finding".into(),
+                    "keep the answer under 80 words".into(),
+                ],
+                history,
+                needle_id: format!("note-{i:02}-{needle_pos:03}"),
+                query: marker.clone(),
+                answer_marker: marker,
+            }
+        })
+        .collect()
+}
+
+/// Deterministic sweep over policies × budgets × history sizes.
+pub fn run_sweep(
+    budgets: &[usize],
+    history_lens: &[usize],
+    scenarios_per_point: usize,
+) -> SweepReport {
+    let policies = ["working_set", "retrieval_topk", "full_history"];
+    let mut points = Vec::new();
+    for &history_len in history_lens {
+        let scenarios = generate_suite_sized(scenarios_per_point, history_len);
+        for &budget in budgets {
+            for policy in policies {
+                let n = scenarios.len().max(1) as f64;
+                let (mut success, mut correct, mut kept, mut tokens) = (0.0, 0.0, 0.0, 0.0);
+                for scenario in &scenarios {
+                    let selection = select(policy, scenario, budget);
+                    let ok = selection.included_needle && selection.constraint_retained;
+                    success += if ok { 1.0 } else { 0.0 };
+                    correct += if selection.included_needle { 1.0 } else { 0.0 };
+                    kept += if selection.constraint_retained {
+                        1.0
+                    } else {
+                        0.0
+                    };
+                    tokens += selection.tokens as f64;
+                }
+                points.push(SweepPoint {
+                    policy: policy.to_string(),
+                    history_len,
+                    budget_tokens: budget,
+                    success_rate: success / n,
+                    correctness: correct / n,
+                    constraint_retention: kept / n,
+                    mean_tokens: tokens / n,
+                });
+            }
+        }
+    }
+    SweepReport {
+        generated_at: crate::storage::event_ledger::now(),
+        points,
+    }
+}
+
+// ---- Gate quality: catch rate per failure mode + false-kill rate ----
+
+#[derive(Clone, Debug, Serialize)]
+pub struct GateCase {
+    pub label: String,
+    pub verdict: &'static str,
+    pub caught: bool,
+    pub error_code: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+pub struct GateReport {
+    pub generated_at: String,
+    pub cases: Vec<GateCase>,
+    pub catch_rate_per_mode: BTreeMap<String, f64>,
+    pub false_kill_rate: f64,
+    pub good_pass_rate: f64,
+}
+
+impl GateReport {
+    pub fn render_markdown(&self) -> String {
+        let mut out = String::new();
+        out.push_str("# Verification-gate quality (catch rate / false-kill)\n\n");
+        out.push_str(&format!("- generated_at: {}\n\n", self.generated_at));
+        out.push_str("| failure mode | catch rate |\n|---|---|\n");
+        for (mode, rate) in &self.catch_rate_per_mode {
+            out.push_str(&format!("| {mode} | {rate:.2} |\n"));
+        }
+        out.push_str(&format!(
+            "\n- good-deliverable pass rate: **{:.2}** (false-kill rate: **{:.2}**)\n",
+            self.good_pass_rate, self.false_kill_rate
+        ));
+        out
+    }
+
+    pub fn to_json(&self) -> String {
+        serde_json::to_string_pretty(self).unwrap_or_else(|_| "{}".to_string())
+    }
+}
+
+/// Runs the real `VerificationEngine` over a labeled deliverable mixture.
+pub fn run_gate_metrics(
+    storage_root: &std::path::Path,
+) -> Result<GateReport, crate::error::SfaiError> {
+    use crate::app::build_app;
+    use crate::contracts::TrustLevel;
+
+    let app = build_app(storage_root)?;
+    let mut cases = Vec::new();
+
+    // Deliverable templates: (label, is_good, content builder)
+    type ModeSpec = (&'static str, bool, Box<dyn Fn(usize, &str) -> String>);
+    let modes: Vec<ModeSpec> = vec![
+        (
+            "good_report",
+            true,
+            Box::new(|i: usize, ref1: &str| {
+                format!("# Report {i}\n\nAll claims are backed.\n\n- source: {ref1}\n")
+            }),
+        ),
+        (
+            "broken_citation",
+            false,
+            Box::new(|i: usize, _r: &str| {
+                format!("# Report {i}\n\n- source: source://missing@1\n")
+            }),
+        ),
+        (
+            "zero_citation",
+            false,
+            Box::new(|i: usize, _r: &str| format!("# Report {i}\n\nPure prose without refs.\n")),
+        ),
+        (
+            "placeholder_text",
+            false,
+            Box::new(|i: usize, ref1: &str| {
+                format!("# Report {i}\n\nTODO: finish.\n\n- source: {ref1}\n")
+            }),
+        ),
+        (
+            "wrong_answer",
+            false,
+            Box::new(|i: usize, ref1: &str| {
+                format!("# Report {i}\n\nThe answer is 99999.\n\n- source: {ref1}\n")
+            }),
+        ),
+    ];
+
+    let per_mode = 4usize;
+    let mut pass_counts: BTreeMap<String, (usize, usize)> = BTreeMap::new(); // (passes, total)
+    for (mode, is_good, build) in &modes {
+        for i in 0..per_mode {
+            let task = app.create_task(
+                &format!("gate case {mode} {i}"),
+                vec![],
+                vec![
+                    "artifact_exists:report.md".into(),
+                    "citations_resolve".into(),
+                    "no_placeholders:report.md".into(),
+                    "artifact_contains:report.md:retention figure is 42%".into(),
+                ],
+                None,
+            )?;
+            let source = app.objects.put_source(
+                &task.task_id,
+                "https://example.org/evidence",
+                b"the retention figure is 42% under sparse-context",
+                "text/plain",
+                "web",
+                TrustLevel::Untrusted,
+            )?;
+            let ref1 = crate::ids::source_ref(&source.source_id, 1);
+            let content = if *mode == "good_report" {
+                format!(
+                    "# Report {i}\n\nAll claims are backed: the retention figure is 42%.\n\n- source: {ref1}\n"
+                )
+            } else if *mode == "wrong_answer" {
+                format!("# Report {i}\n\nThe answer is 99999.\n\n- source: {ref1}\n")
+            } else {
+                build(i, &ref1)
+            };
+            app.objects.put_artifact(
+                &task.task_id,
+                "report.md",
+                content.as_bytes(),
+                "text/markdown",
+                &[],
+            )?;
+            let results = app.verifier.verify(
+                &task.task_id,
+                &[
+                    "artifact_exists:report.md".into(),
+                    "citations_resolve".into(),
+                    "no_placeholders:report.md".into(),
+                    "artifact_contains:report.md:retention figure is 42%".into(),
+                ],
+            )?;
+            let passed = results
+                .iter()
+                .all(|r| r.verdict == crate::contracts::Verdict::Pass);
+            let error_code = results
+                .iter()
+                .find(|r| r.verdict == crate::contracts::Verdict::Fail)
+                .and_then(|r| r.diagnostics.first())
+                .map(|d| d.error_code.clone())
+                .unwrap_or_default();
+            let entry = pass_counts.entry(mode.to_string()).or_insert((0, 0));
+            entry.1 += 1;
+            if passed {
+                entry.0 += 1;
+            }
+            cases.push(GateCase {
+                label: format!("{mode}-{i}"),
+                verdict: if passed { "pass" } else { "fail" },
+                caught: !passed && !is_good,
+                error_code,
+            });
+        }
+    }
+
+    let mut catch_rate_per_mode = BTreeMap::new();
+    let (mut good_pass, mut good_total) = (0usize, 0usize);
+    for (mode, is_good, _) in &modes {
+        let (passes, total) = pass_counts[*mode];
+        if *is_good {
+            good_pass += passes;
+            good_total += total;
+        } else {
+            let caught = total - passes;
+            catch_rate_per_mode.insert(mode.to_string(), caught as f64 / total as f64);
+        }
+    }
+    let good_pass_rate = good_pass as f64 / good_total.max(1) as f64;
+    Ok(GateReport {
+        generated_at: crate::storage::event_ledger::now(),
+        cases,
+        catch_rate_per_mode,
+        false_kill_rate: 1.0 - good_pass_rate,
+        good_pass_rate,
+    })
 }
 
 #[cfg(test)]

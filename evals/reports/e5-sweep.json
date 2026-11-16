@@ -1,0 +1,572 @@
+{
+  "generated_at": "2026-11-16T11:47:36.249958+00:00",
+  "points": [
+    {
+      "policy": "working_set",
+      "history_len": 40,
+      "budget_tokens": 50,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 41.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 40,
+      "budget_tokens": 50,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 40,
+      "budget_tokens": 50,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 810.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 40,
+      "budget_tokens": 100,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 87.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 40,
+      "budget_tokens": 100,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 40,
+      "budget_tokens": 100,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 810.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 40,
+      "budget_tokens": 200,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 187.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 40,
+      "budget_tokens": 200,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 40,
+      "budget_tokens": 200,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 810.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 40,
+      "budget_tokens": 400,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 387.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 40,
+      "budget_tokens": 400,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 40,
+      "budget_tokens": 400,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 810.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 40,
+      "budget_tokens": 800,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 787.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 40,
+      "budget_tokens": 800,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 40,
+      "budget_tokens": 800,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 810.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 40,
+      "budget_tokens": 1600,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 827.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 40,
+      "budget_tokens": 1600,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 40,
+      "budget_tokens": 1600,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 810.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 40,
+      "budget_tokens": 3200,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 827.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 40,
+      "budget_tokens": 3200,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 40,
+      "budget_tokens": 3200,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 810.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 80,
+      "budget_tokens": 50,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 41.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 80,
+      "budget_tokens": 50,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 80,
+      "budget_tokens": 50,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 1610.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 80,
+      "budget_tokens": 100,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 87.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 80,
+      "budget_tokens": 100,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 80,
+      "budget_tokens": 100,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 1610.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 80,
+      "budget_tokens": 200,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 187.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 80,
+      "budget_tokens": 200,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 80,
+      "budget_tokens": 200,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 1610.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 80,
+      "budget_tokens": 400,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 387.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 80,
+      "budget_tokens": 400,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 80,
+      "budget_tokens": 400,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 1610.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 80,
+      "budget_tokens": 800,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 787.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 80,
+      "budget_tokens": 800,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 80,
+      "budget_tokens": 800,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 1610.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 80,
+      "budget_tokens": 1600,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 1587.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 80,
+      "budget_tokens": 1600,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 80,
+      "budget_tokens": 1600,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 1610.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 80,
+      "budget_tokens": 3200,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 1627.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 80,
+      "budget_tokens": 3200,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 80,
+      "budget_tokens": 3200,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 1610.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 160,
+      "budget_tokens": 50,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 41.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 160,
+      "budget_tokens": 50,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 160,
+      "budget_tokens": 50,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 3210.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 160,
+      "budget_tokens": 100,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 87.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 160,
+      "budget_tokens": 100,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 160,
+      "budget_tokens": 100,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 3210.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 160,
+      "budget_tokens": 200,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 187.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 160,
+      "budget_tokens": 200,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 160,
+      "budget_tokens": 200,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 3210.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 160,
+      "budget_tokens": 400,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 387.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 160,
+      "budget_tokens": 400,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 160,
+      "budget_tokens": 400,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 3210.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 160,
+      "budget_tokens": 800,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 787.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 160,
+      "budget_tokens": 800,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 160,
+      "budget_tokens": 800,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 3210.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 160,
+      "budget_tokens": 1600,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 1587.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 160,
+      "budget_tokens": 1600,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 160,
+      "budget_tokens": 1600,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 3210.0
+    },
+    {
+      "policy": "working_set",
+      "history_len": 160,
+      "budget_tokens": 3200,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 3187.0
+    },
+    {
+      "policy": "retrieval_topk",
+      "history_len": 160,
+      "budget_tokens": 3200,
+      "success_rate": 0.0,
+      "correctness": 1.0,
+      "constraint_retention": 0.0,
+      "mean_tokens": 24.0
+    },
+    {
+      "policy": "full_history",
+      "history_len": 160,
+      "budget_tokens": 3200,
+      "success_rate": 1.0,
+      "correctness": 1.0,
+      "constraint_retention": 1.0,
+      "mean_tokens": 3210.0
+    }
+  ]
+}
