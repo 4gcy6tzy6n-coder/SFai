@@ -15,13 +15,13 @@ use sfai::integrations::providers::fake::ConversationalDemoModel;
 use sfai::integrations::providers::openai_compat::OpenAICompatibleAdapter;
 use sfai::telemetry::replay::replay_trace;
 use sfai::ui::{
-    detect_model_label, read_chat_input_box, render_box, render_capabilities_table,
+    collect_modified_files, read_chat_input_box, render_box, render_capabilities_table,
     render_chat_history, render_context_read, render_context_search, render_doctor_card,
-    render_fixtures_table, render_help_card, render_inspect_timeline, render_run_summary,
-    render_skill_detail, render_skills_list, render_task_status_card, render_tasks_table,
-    render_trace_card, render_user_chat_bubble, render_verification_card, render_welcome_banner,
-    render_wiki_view, BannerInfo, ChatComposerStatus, ChatTurn, ClaudeStepObserver,
-    CliApprovalProvider, PermissionMode, Theme,
+    render_file_diff_box, render_files_summary_card, render_fixtures_table, render_help_card,
+    render_inspect_timeline, render_run_summary, render_skill_detail, render_skills_list,
+    render_task_status_card, render_tasks_table, render_top_dashboard, render_trace_card,
+    render_user_chat_bubble, render_verification_card, render_wiki_view, ChatComposerStatus,
+    ChatTurn, ClaudeStepObserver, CliApprovalProvider, DashboardInfo, PermissionMode, Theme,
 };
 
 #[derive(Parser)]
@@ -106,6 +106,20 @@ enum Cmd {
     },
     /// Run system health and configuration diagnostics
     Doctor,
+    /// Run the agent framework benchmark (time/correctness/tokens/cost/ablations)
+    Bench {
+        /// Suite name or comma list: all|tool-use|dataset|long-horizon|edge-case
+        #[arg(long, default_value = "all")]
+        suite: String,
+        /// Ablation or comma list: all|none|full_context|no_pinned|no_verification|no_wiki
+        #[arg(long, default_value = "all")]
+        ablation: String,
+        #[arg(long, default_value_t = 6)]
+        size: usize,
+        /// Write the JSON report to this path (default: <storage>/benchmarks/report-<ts>.json)
+        #[arg(long)]
+        out: Option<PathBuf>,
+    },
     /// Run the offline sparse-context evaluation harness (research track)
     Eval {
         #[arg(long, default_value = "sparse-context")]
@@ -502,6 +516,59 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
                 Ok(0)
             }
         },
+        Cmd::Bench {
+            suite,
+            ablation,
+            size,
+            out,
+        } => {
+            let suites: Vec<String> = if suite == "all" {
+                sfai::benchmark::SUITES
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            } else {
+                suite.split(',').map(|s| s.trim().to_string()).collect()
+            };
+            let ablations: Vec<String> = if ablation == "all" {
+                sfai::benchmark::ABLATIONS
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect()
+            } else {
+                ablation.split(',').map(|s| s.trim().to_string()).collect()
+            };
+            for s in &suites {
+                if !sfai::benchmark::SUITES.contains(&s.as_str()) {
+                    return Err(format!(
+                        "unknown suite {s:?}; choose from {:?}",
+                        sfai::benchmark::SUITES
+                    ));
+                }
+            }
+            for a in &ablations {
+                if !sfai::benchmark::ABLATIONS.contains(&a.as_str()) {
+                    return Err(format!(
+                        "unknown ablation {a:?}; choose from {:?}",
+                        sfai::benchmark::ABLATIONS
+                    ));
+                }
+            }
+            let report = sfai::benchmark::run_benchmark(&suites, &ablations, size);
+            println!("{}", report.render_markdown());
+            let stamp = report.generated_at.replace([':', '.'], "-");
+            let path = out.unwrap_or_else(|| {
+                cli.storage
+                    .join("benchmarks")
+                    .join(format!("report-{stamp}.json"))
+            });
+            if let Some(parent) = path.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::write(&path, report.to_json()).map_err(|e| e.to_string())?;
+            eprintln!("benchmark report written to {}", path.display());
+            Ok(0)
+        }
         Cmd::Eval {
             suite,
             size,
@@ -589,18 +656,60 @@ impl SessionStats {
     }
 }
 
-fn print_banner(app: &App, approvals: &CliApprovalProvider, theme: &Theme) {
-    let model_label = detect_model_label();
-    let tasks_count = app.task_store.list(1000).map(|t| t.len()).unwrap_or(0);
-    let info = BannerInfo {
+#[allow(clippy::too_many_arguments)]
+fn print_dashboard(
+    app: &App,
+    approvals: &CliApprovalProvider,
+    last_task: Option<&str>,
+    model_mode: ChatModelMode,
+    session_constraints_len: usize,
+    turns_count: usize,
+    stats: &SessionStats,
+    theme: &Theme,
+) {
+    let model_label = model_mode.label();
+    let (active_status, active_refs_count, pinned_count, wiki_nodes, wiki_edges) =
+        if let Some(tid) = last_task {
+            let st = app.task_store.state(tid).ok();
+            let status = st.as_ref().map(|s| s.status);
+            let pinned = st
+                .as_ref()
+                .map(|s| s.pinned_constraints.len())
+                .unwrap_or(session_constraints_len);
+            let sources = app
+                .objects
+                .source_refs_for_task(tid)
+                .map(|v| v.len())
+                .unwrap_or(0);
+            let arts = app
+                .objects
+                .artifact_refs_for_task(tid)
+                .map(|v| v.len())
+                .unwrap_or(0);
+            let wn = app.wiki.nodes_for(tid).map(|v| v.len()).unwrap_or(0);
+            let we = app.wiki.edges_for(tid).map(|v| v.len()).unwrap_or(0);
+            (status, sources + arts, pinned, wn, we)
+        } else {
+            (None, 0, session_constraints_len, 0, 0)
+        };
+    let modified_files_count = collect_modified_files(app, None).len();
+    let info = DashboardInfo {
         storage: &app.storage_root.display().to_string(),
         model_label: &model_label,
-        capabilities_count: app.registry.discover("", 100, None).len(),
-        skills_count: app.skills.discover("", 100).len(),
-        tasks_count,
         permission_mode: approvals.mode(),
+        active_task: last_task,
+        active_status,
+        active_refs_count,
+        pinned_constraints_count: pinned_count,
+        wiki_nodes,
+        wiki_edges,
+        modified_files_count,
+        turns_count,
+        total_input_tokens: stats.total_input_tokens,
+        total_output_tokens: stats.total_output_tokens,
+        session_cost_usd: stats.total_cost_usd,
     };
-    println!("{}\n", render_welcome_banner(&info, theme));
+    println!("{}\n", render_top_dashboard(&info, theme));
 }
 
 fn resolve_target_task(arg: &str, last_task: Option<&str>, app: &App) -> Result<String, String> {
@@ -655,8 +764,6 @@ fn interactive(
     approvals: &Arc<CliApprovalProvider>,
     theme: Theme,
 ) -> Result<u8, String> {
-    print_banner(app, approvals, &theme);
-
     let mut last_task: Option<String> = app
         .task_store
         .list(1)
@@ -667,14 +774,29 @@ fn interactive(
     let mut stats = SessionStats::default();
     let mut chat_history: Vec<ChatTurn> = Vec::new();
     let mut model_mode = ChatModelMode::Auto;
+    let mut file_snapshots: std::collections::BTreeMap<String, (u32, String)> =
+        std::collections::BTreeMap::new();
+
+    print_dashboard(
+        app,
+        approvals,
+        last_task.as_deref(),
+        model_mode,
+        session_constraints.len(),
+        chat_history.len(),
+        &stats,
+        &theme,
+    );
 
     loop {
         let model_label = model_mode.label();
+        let modified_files = collect_modified_files(app, None);
         let composer_status = ChatComposerStatus {
             active_task: last_task.as_deref(),
             perm_mode: approvals.mode(),
             model_label: &model_label,
             constraints_count: session_constraints.len(),
+            modified_files_count: modified_files.len(),
             turns_count: chat_history.len(),
             session_cost_usd: stats.total_cost_usd,
         };
@@ -690,6 +812,47 @@ fn interactive(
         }
         if matches!(input, "/help" | "?") {
             println!("{}\n", render_help_card(&theme));
+            continue;
+        }
+        if matches!(input, "/dashboard" | "/hud") {
+            print_dashboard(
+                app,
+                approvals,
+                last_task.as_deref(),
+                model_mode,
+                session_constraints.len(),
+                chat_history.len(),
+                &stats,
+                &theme,
+            );
+            continue;
+        }
+        if input == "/files" || input.starts_with("/files ") {
+            let arg = input.strip_prefix("/files").unwrap_or("").trim();
+            let scope = if arg.is_empty() { None } else { Some(arg) };
+            let files = collect_modified_files(app, scope);
+            println!("{}\n", render_files_summary_card(&files, &theme));
+            continue;
+        }
+        if input == "/diff" || input.starts_with("/diff ") {
+            let arg = input.strip_prefix("/diff").unwrap_or("").trim();
+            let files = collect_modified_files(app, None);
+            let filtered: Vec<_> = if arg.is_empty() {
+                files
+            } else {
+                files.into_iter().filter(|f| f.path == arg).collect()
+            };
+            if filtered.is_empty() {
+                println!(
+                    "  {} no modified files matching {:?}\n",
+                    theme.dim("◌"),
+                    arg
+                );
+            } else {
+                for change in &filtered {
+                    println!("{}\n", render_file_diff_box(change, 80, 0, &theme));
+                }
+            }
             continue;
         }
         if matches!(input, "/history" | "/chat") {
@@ -740,7 +903,16 @@ fn interactive(
             if theme.color {
                 print!("\x1b[2J\x1b[H");
             }
-            print_banner(app, approvals, &theme);
+            print_dashboard(
+                app,
+                approvals,
+                last_task.as_deref(),
+                model_mode,
+                session_constraints.len(),
+                chat_history.len(),
+                &stats,
+                &theme,
+            );
             continue;
         }
         if input == "/fixtures" {
@@ -895,8 +1067,27 @@ fn interactive(
                 println!("  usage: /run <{}>\n", FIXTURE_NAMES.join("|"));
                 continue;
             }
-            match run_fixture_interactive(app, name, &mut stats, &theme) {
-                Ok(task_id) => last_task = Some(task_id),
+            match run_fixture_interactive(
+                app,
+                name,
+                &mut stats,
+                &mut chat_history,
+                &mut file_snapshots,
+                &theme,
+            ) {
+                Ok(task_id) => {
+                    last_task = Some(task_id);
+                    print_dashboard(
+                        app,
+                        approvals,
+                        last_task.as_deref(),
+                        model_mode,
+                        session_constraints.len(),
+                        chat_history.len(),
+                        &stats,
+                        &theme,
+                    );
+                }
                 Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
             }
             continue;
@@ -1084,9 +1275,22 @@ fn interactive(
             model_mode,
             &mut stats,
             &mut chat_history,
+            &mut file_snapshots,
             &theme,
         ) {
-            Ok(task_id) => last_task = Some(task_id),
+            Ok(task_id) => {
+                last_task = Some(task_id);
+                print_dashboard(
+                    app,
+                    approvals,
+                    last_task.as_deref(),
+                    model_mode,
+                    session_constraints.len(),
+                    chat_history.len(),
+                    &stats,
+                    &theme,
+                );
+            }
             Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
         }
     }
@@ -1098,9 +1302,16 @@ fn run_fixture_interactive(
     app: &App,
     name: &str,
     stats: &mut SessionStats,
+    chat_history: &mut Vec<ChatTurn>,
+    file_snapshots: &mut std::collections::BTreeMap<String, (u32, String)>,
     theme: &Theme,
 ) -> Result<String, String> {
     let spec = get_fixture(name).map_err(|e| e.to_string())?;
+    let turn_idx = chat_history.len() + 1;
+    println!(
+        "\n{}",
+        render_user_chat_bubble(turn_idx, &format!("/run {} — {}", name, spec.goal), theme)
+    );
     let task = app
         .create_task(
             &spec.goal,
@@ -1113,11 +1324,39 @@ fn run_fixture_interactive(
         setup(app, &task).map_err(|e| e.to_string())?;
     }
     let mut model = (spec.build_model)();
-    let mut observer = ClaudeStepObserver::new(std::io::stdout(), *theme);
+    let mut observer = ClaudeStepObserver::with_snapshots(
+        std::io::stdout(),
+        *theme,
+        std::mem::take(file_snapshots),
+    );
     let result = app
         .run_observed(model.as_mut(), &task.task_id, 50, &mut observer)
         .map_err(|e| e.to_string())?;
+    *file_snapshots = observer.take_snapshots();
     stats.record(&result);
+    let cost_usd = result
+        .cost
+        .get("cost_usd")
+        .and_then(|c| c.as_f64())
+        .unwrap_or(0.0);
+    let tool_calls = result
+        .cost
+        .get("tool_calls")
+        .and_then(|c| c.as_u64())
+        .unwrap_or(0);
+    chat_history.push(ChatTurn {
+        turn_index: turn_idx,
+        task_id: result.task_id.clone(),
+        user_message: format!("/run {name}"),
+        ai_response: result
+            .answer
+            .clone()
+            .unwrap_or_else(|| format!("Status: {}", result.status.as_str())),
+        status: result.status,
+        steps: result.steps,
+        tool_calls,
+        cost_usd,
+    });
     print!("{}", render_run_summary(&result, theme));
     Ok(task.task_id)
 }
@@ -1159,6 +1398,7 @@ fn run_goal_interactive(
     model_mode: ChatModelMode,
     stats: &mut SessionStats,
     chat_history: &mut Vec<ChatTurn>,
+    file_snapshots: &mut std::collections::BTreeMap<String, (u32, String)>,
     theme: &Theme,
 ) -> Result<String, String> {
     let turn_idx = chat_history.len() + 1;
@@ -1186,9 +1426,14 @@ fn run_goal_interactive(
         }
     };
 
-    let mut observer = ClaudeStepObserver::new(std::io::stdout(), *theme);
+    let mut observer = ClaudeStepObserver::with_snapshots(
+        std::io::stdout(),
+        *theme,
+        std::mem::take(file_snapshots),
+    );
     match app.run_observed(model.as_mut(), &task.task_id, 50, &mut observer) {
         Ok(result) => {
+            *file_snapshots = observer.take_snapshots();
             stats.record(&result);
             let cost_usd = result
                 .cost

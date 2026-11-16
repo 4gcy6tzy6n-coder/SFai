@@ -22,6 +22,11 @@ pub struct EnvelopeBuilder {
     pub retriever: ContextRetriever,
     pub ledger: Option<EventLedger>,
     pub active_context_tokens: usize,
+    /// How many retrieval candidates the envelope considers (full-context
+    /// ablation raises this).
+    pub candidate_limit: usize,
+    /// Ablation switch: when false, constraints are not pinned into the envelope.
+    pub pin_constraints: bool,
 }
 
 impl EnvelopeBuilder {
@@ -35,6 +40,8 @@ impl EnvelopeBuilder {
             retriever,
             ledger,
             active_context_tokens: ACTIVE_CONTEXT_TOKENS,
+            candidate_limit: 12,
+            pin_constraints: true,
         }
     }
 
@@ -64,21 +71,26 @@ impl EnvelopeBuilder {
                 .collect::<Vec<_>>()
                 .join(" OR ")
         };
-        let candidates = self
-            .retriever
-            .search(&query, Some(&task.task_id), None, 12)?;
+        let candidates =
+            self.retriever
+                .search(&query, Some(&task.task_id), None, self.candidate_limit)?;
         let active_refs: BTreeSet<String> = state.completed_outputs.iter().cloned().collect();
+        let pinned_texts: Vec<String> = if self.pin_constraints {
+            task.constraints.clone()
+        } else {
+            Vec::new()
+        };
         let (selected, receipt) = compile_working_set(
             &candidates,
             &task.goal,
             self.active_context_tokens,
-            &task.constraints,
+            &pinned_texts,
             Some(&active_refs),
         );
         let selected_refs: Vec<String> = selected.iter().map(|c| c.ref_id.clone()).collect();
         Ok(ContextEnvelope {
             goal: task.goal.clone(),
-            pinned_constraints: task.constraints.clone(),
+            pinned_constraints: pinned_texts,
             task_state: Self::state_summary(state),
             root_index: self.index.root_index(&task.task_id),
             active_refs: selected_refs,

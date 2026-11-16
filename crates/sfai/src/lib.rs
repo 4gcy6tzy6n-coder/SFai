@@ -1,5 +1,6 @@
 //! System for future ai (sfai) — model-native agent platform, Rust edition.
 
+pub mod benchmark;
 pub mod contracts;
 pub mod error;
 pub mod eval;

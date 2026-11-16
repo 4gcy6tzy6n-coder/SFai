@@ -253,7 +253,7 @@ fn interactive_chat_dialog_box_and_multi_turn_conversation() {
         let stdin = child.stdin.as_mut().expect("stdin");
         stdin
             .write_all(
-                "你好，介绍一下你自己\n搜索并写一份关于 sparse context 的研究报告\n检索之前的证据来源\n/history\n/quit\n"
+                "你好，介绍一下你自己\n搜索并写一份关于 sparse context 的研究报告\n修改 report.md 增加性能对比结论\n检索之前的证据来源\n/files\n/diff report.md\n/history\n/quit\n"
                     .as_bytes(),
             )
             .expect("write chat turns");
@@ -266,14 +266,22 @@ fn interactive_chat_dialog_box_and_multi_turn_conversation() {
         String::from_utf8_lossy(&out.stderr)
     );
     let stdout = String::from_utf8_lossy(&out.stdout);
+    // Top compact dashboard HUD
+    assert!(stdout.contains("✻ sfai Dashboard"), "stdout: {stdout}");
     // Bottom chat input dialog box & status bar
     assert!(stdout.contains("✻ Chat with sfai AI"), "stdout: {stdout}");
     assert!(stdout.contains("│ ❯ sfai>"), "stdout: {stdout}");
     assert!(stdout.contains("⏵⏵"), "stdout: {stdout}");
-    // User & AI conversation bubbles across turns
+    // User & AI conversation bubbles across turns + inline File Modification Diffs
     assert!(stdout.contains("▸ You · Turn #1"), "stdout: {stdout}");
     assert!(stdout.contains("▸ You · Turn #2"), "stdout: {stdout}");
     assert!(stdout.contains("▸ You · Turn #3"), "stdout: {stdout}");
+    assert!(stdout.contains("✦ File report.md"), "stdout: {stdout}");
+    assert!(stdout.contains("(modified · v2)"), "stdout: {stdout}");
+    assert!(
+        stdout.contains("✻ Modified Files in Workspace"),
+        "stdout: {stdout}"
+    );
     assert!(stdout.contains("✻ Response (sfai AI)"), "stdout: {stdout}");
     assert!(
         stdout.contains("Retrieved 3 indexed source(s)"),

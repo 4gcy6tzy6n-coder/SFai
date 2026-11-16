@@ -111,6 +111,7 @@ impl VerificationEngine {
             "code_tests_pass" => self.verify_code_tests(task_id, criterion, arg),
             "json_valid" => self.verify_json(task_id, criterion, arg),
             "no_placeholders" => self.verify_placeholders(task_id, criterion, arg),
+            "artifact_contains" => self.verify_contains(task_id, criterion, arg),
             "hash_matches" => {
                 let artifacts = self.objects.task_artifacts(task_id)?;
                 if let Some(a) = artifacts.iter().find(|a| a.checksum == arg) {
@@ -326,6 +327,57 @@ impl VerificationEngine {
                     "PLACEHOLDER_TEXT_FOUND",
                     found,
                     "Replace placeholder text with real content.",
+                    true,
+                )],
+            })
+        }
+    }
+
+    fn verify_contains(
+        &self,
+        task_id: &str,
+        criterion: &str,
+        arg: &str,
+    ) -> Result<VerificationResult> {
+        let (path, needle) = match arg.split_once(':') {
+            Some((p, n)) => (p, n),
+            None => (arg, ""),
+        };
+        let Some(artifact) = self.objects.find_artifact_by_path(task_id, path)? else {
+            return Ok(self.fail(
+                &format!("artifact://{task_id}/{path}@0"),
+                criterion,
+                "ARTIFACT_MISSING",
+                &format!("no artifact at {path}"),
+                "Produce the artifact before validating it.",
+                Vec::new(),
+            ));
+        };
+        let target = format!("artifact://{}@{}", artifact.artifact_id, artifact.version);
+        let text = self.objects.read_artifact_text(&artifact.artifact_id)?;
+        if text.contains(needle) {
+            Ok(VerificationResult {
+                target_ref: target,
+                criterion: criterion.to_string(),
+                verdict: Verdict::Pass,
+                findings: format!("{path} contains expected content"),
+                evidence_refs: Vec::new(),
+                diagnostics: Vec::new(),
+            })
+        } else {
+            Ok(VerificationResult {
+                target_ref: target.clone(),
+                criterion: criterion.to_string(),
+                verdict: Verdict::Fail,
+                findings: format!("{path} is missing expected content {needle:?}"),
+                evidence_refs: Vec::new(),
+                diagnostics: vec![diagnostic(
+                    Verdict::Fail,
+                    &target,
+                    criterion,
+                    "GROUND_TRUTH_MISMATCH",
+                    Vec::new(),
+                    "Produce the expected answer content and rerun verification.",
                     true,
                 )],
             })

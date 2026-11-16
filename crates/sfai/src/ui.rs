@@ -453,6 +453,305 @@ pub struct BannerInfo<'a> {
     pub permission_mode: PermissionMode,
 }
 
+/// Compact Top Dashboard HUD consolidating system telemetry at the top of the
+/// UI so the main area stays focused on conversation, commands, and file diffs.
+pub struct DashboardInfo<'a> {
+    pub storage: &'a str,
+    pub model_label: &'a str,
+    pub permission_mode: PermissionMode,
+    pub active_task: Option<&'a str>,
+    pub active_status: Option<TaskStatus>,
+    pub active_refs_count: usize,
+    pub pinned_constraints_count: usize,
+    pub wiki_nodes: usize,
+    pub wiki_edges: usize,
+    pub modified_files_count: usize,
+    pub turns_count: usize,
+    pub total_input_tokens: u64,
+    pub total_output_tokens: u64,
+    pub session_cost_usd: f64,
+}
+
+pub fn render_top_dashboard(info: &DashboardInfo<'_>, theme: &Theme) -> String {
+    let title = format!(
+        "{} {}",
+        theme.accent("✻ sfai Dashboard"),
+        theme.dim("· System for future ai · interactive session")
+    );
+    let task_badge = match (info.active_task, info.active_status) {
+        (Some(tid), Some(st)) => {
+            let short = if tid.len() > 14 { &tid[..14] } else { tid };
+            format!("{} ({})", theme.cyan(short), theme.status_badge(st))
+        }
+        (Some(tid), None) => theme.cyan(tid),
+        _ => theme.dim("none"),
+    };
+    let model_short = truncate_plain(info.model_label, 24);
+    let row1 = format!(
+        "{} {}   {} {}   {} {}",
+        theme.dim("Model:"),
+        theme.cyan(&model_short),
+        theme.dim("Permissions:"),
+        info.permission_mode.badge(theme),
+        theme.dim("Context:"),
+        theme.magenta(&format!(
+            "{} ref(s) · {} pinned",
+            info.active_refs_count, info.pinned_constraints_count
+        ))
+    );
+    let row2 = format!(
+        "{} {}   {} {}   {} {}   {} {}",
+        theme.dim("Task:"),
+        task_badge,
+        theme.dim("Wiki:"),
+        theme.cyan(&format!("{}n/{}e", info.wiki_nodes, info.wiki_edges)),
+        theme.dim("Files:"),
+        theme.yellow_bold(&format!("{} modified", info.modified_files_count)),
+        theme.dim("Cost:"),
+        theme.green(&format!(
+            "${:.4} ({}→{} tok)",
+            info.session_cost_usd, info.total_input_tokens, info.total_output_tokens
+        ))
+    );
+    render_box(&title, &[row1, row2], 76, theme)
+}
+
+// ---- File Modification & Line-by-Line Diff Engine ----
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DiffLine {
+    Context(usize, String),
+    Add(usize, String),
+    Remove(usize, String),
+}
+
+#[derive(Debug, Clone)]
+pub struct FileChange {
+    pub task_id: String,
+    pub path: String,
+    pub artifact_ref: String,
+    pub version: u32,
+    pub old_content: Option<String>,
+    pub new_content: String,
+    pub added_lines: usize,
+    pub removed_lines: usize,
+}
+
+/// Compute a line-by-line LCS diff between optional previous file content and
+/// new file content.
+pub fn compute_line_diff(old: Option<&str>, new: &str) -> (Vec<DiffLine>, usize, usize) {
+    let new_lines: Vec<&str> = new.lines().collect();
+    let Some(old_text) = old else {
+        let out: Vec<DiffLine> = new_lines
+            .iter()
+            .enumerate()
+            .map(|(i, l)| DiffLine::Add(i + 1, (*l).to_string()))
+            .collect();
+        let added = out.len();
+        return (out, added, 0);
+    };
+    let old_lines: Vec<&str> = old_text.lines().collect();
+    let m = old_lines.len();
+    let n = new_lines.len();
+    let mut dp = vec![vec![0usize; n + 1]; m + 1];
+    for i in (0..m).rev() {
+        for j in (0..n).rev() {
+            if old_lines[i] == new_lines[j] {
+                dp[i][j] = 1 + dp[i + 1][j + 1];
+            } else {
+                dp[i][j] = dp[i + 1][j].max(dp[i][j + 1]);
+            }
+        }
+    }
+    let mut diff = Vec::new();
+    let mut added = 0usize;
+    let mut removed = 0usize;
+    let (mut i, mut j) = (0usize, 0usize);
+    while i < m && j < n {
+        if old_lines[i] == new_lines[j] {
+            diff.push(DiffLine::Context(j + 1, new_lines[j].to_string()));
+            i += 1;
+            j += 1;
+        } else if dp[i + 1][j] >= dp[i][j + 1] {
+            diff.push(DiffLine::Remove(i + 1, old_lines[i].to_string()));
+            removed += 1;
+            i += 1;
+        } else {
+            diff.push(DiffLine::Add(j + 1, new_lines[j].to_string()));
+            added += 1;
+            j += 1;
+        }
+    }
+    while i < m {
+        diff.push(DiffLine::Remove(i + 1, old_lines[i].to_string()));
+        removed += 1;
+        i += 1;
+    }
+    while j < n {
+        diff.push(DiffLine::Add(j + 1, new_lines[j].to_string()));
+        added += 1;
+        j += 1;
+    }
+    (diff, added, removed)
+}
+
+pub fn render_file_diff_box(
+    change: &FileChange,
+    max_lines: usize,
+    indent: usize,
+    theme: &Theme,
+) -> String {
+    let (diff_lines, added, removed) =
+        compute_line_diff(change.old_content.as_deref(), &change.new_content);
+    let mode_tag = if change.old_content.is_none() {
+        "new file".to_string()
+    } else {
+        format!("modified · v{}", change.version)
+    };
+    let title = format!(
+        "{} {} {} {} {}",
+        theme.accent("✦ File"),
+        theme.bold(&change.path),
+        theme.green_bold(&format!("+{added}")),
+        theme.red_bold(&format!("-{removed}")),
+        theme.dim(&format!("({mode_tag})"))
+    );
+    let mut lines = Vec::new();
+    for d in diff_lines.iter().take(max_lines) {
+        match d {
+            DiffLine::Add(ln, text) => {
+                let body = truncate_plain(text, 62);
+                lines.push(format!(
+                    "{:>3} {} {}",
+                    theme.dim(&ln.to_string()),
+                    theme.green_bold("+"),
+                    theme.green(&body)
+                ));
+            }
+            DiffLine::Remove(ln, text) => {
+                let body = truncate_plain(text, 62);
+                lines.push(format!(
+                    "{:>3} {} {}",
+                    theme.dim(&ln.to_string()),
+                    theme.red_bold("-"),
+                    theme.red(&body)
+                ));
+            }
+            DiffLine::Context(ln, text) => {
+                let body = truncate_plain(text, 62);
+                lines.push(format!(
+                    "{:>3}   {}",
+                    theme.dim(&ln.to_string()),
+                    theme.dim(&body)
+                ));
+            }
+        }
+    }
+    if diff_lines.len() > max_lines {
+        lines.push(theme.dim(&format!(
+            "  … +{} more line(s) (run `/diff {}` to inspect full diff)",
+            diff_lines.len() - max_lines,
+            change.path
+        )));
+    }
+    let boxed = render_box(&title, &lines, 70, theme);
+    if indent == 0 {
+        boxed
+    } else {
+        let pad = " ".repeat(indent);
+        boxed
+            .lines()
+            .map(|l| format!("{pad}{l}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+}
+
+pub fn collect_modified_files(app: &App, task_id: Option<&str>) -> Vec<FileChange> {
+    let mut task_ids = Vec::new();
+    if let Some(tid) = task_id {
+        task_ids.push(tid.to_string());
+    } else if let Ok(tasks) = app.task_store.list(20) {
+        for t in tasks.into_iter().rev() {
+            task_ids.push(t.task_id);
+        }
+    }
+    let mut prev_by_path: std::collections::BTreeMap<String, (u32, String)> =
+        std::collections::BTreeMap::new();
+    let mut changes: Vec<FileChange> = Vec::new();
+    for tid in task_ids {
+        let Ok(artifacts) = app.objects.task_artifacts(&tid) else {
+            continue;
+        };
+        for art in artifacts {
+            let content = app
+                .objects
+                .read_artifact_text(&art.artifact_id)
+                .unwrap_or_default();
+            let (prev_ver, old) = match prev_by_path.get(&art.path) {
+                Some((v, old_c)) => (*v, Some(old_c.clone())),
+                None => (0, None),
+            };
+            let ver = prev_ver + 1;
+            prev_by_path.insert(art.path.clone(), (ver, content.clone()));
+            let (_, added, removed) = compute_line_diff(old.as_deref(), &content);
+            changes.push(FileChange {
+                task_id: tid.clone(),
+                path: art.path.clone(),
+                artifact_ref: crate::ids::artifact_ref(&art.artifact_id, art.version),
+                version: ver,
+                old_content: old,
+                new_content: content,
+                added_lines: added,
+                removed_lines: removed,
+            });
+        }
+    }
+    changes
+}
+
+pub fn render_files_summary_card(files: &[FileChange], theme: &Theme) -> String {
+    if files.is_empty() {
+        return render_box(
+            &theme.accent("✻ Modified Files"),
+            &[theme.dim("No files created or modified yet in this workspace.")],
+            74,
+            theme,
+        );
+    }
+    let mut lines = vec![format!(
+        "{:<20} {:<8} {:<14} {:<26} {}",
+        theme.dim("FILE PATH"),
+        theme.dim("VER"),
+        theme.dim("DIFF"),
+        theme.dim("ARTIFACT REF"),
+        theme.dim("TASK")
+    )];
+    lines.push(theme.dim(&"─".repeat(74)));
+    for f in files {
+        let diff_str = format!(
+            "{} {}",
+            theme.green_bold(&format!("+{}", f.added_lines)),
+            theme.red(&format!("-{}", f.removed_lines))
+        );
+        lines.push(format!(
+            "{} {:<8} {} {} {}",
+            pad_right_ansi(&theme.bold(&f.path), 20),
+            format!("v{}", f.version),
+            pad_right_ansi(&diff_str, 14),
+            pad_right_ansi(&theme.cyan(&f.artifact_ref), 26),
+            theme.dim(&truncate_plain(&f.task_id, 14))
+        ));
+    }
+    lines.push(theme.dim("Tip: run `/diff [path]` to inspect line-by-line changes."));
+    render_box(
+        &theme.accent("✻ Modified Files in Workspace"),
+        &lines,
+        76,
+        theme,
+    )
+}
+
 pub fn detect_model_label() -> String {
     let model = std::env::var("SFAI_MODEL_NAME").unwrap_or_default();
     let url = std::env::var("SFAI_MODEL_BASE_URL").unwrap_or_default();
@@ -548,6 +847,7 @@ pub struct ChatComposerStatus<'a> {
     pub perm_mode: PermissionMode,
     pub model_label: &'a str,
     pub constraints_count: usize,
+    pub modified_files_count: usize,
     pub turns_count: usize,
     pub session_cost_usd: f64,
 }
@@ -628,20 +928,20 @@ pub fn render_chat_composer_status_bar(status: &ChatComposerStatus<'_>, theme: &
         .active_task
         .map(|t| if t.len() > 14 { &t[..14] } else { t })
         .unwrap_or("none");
-    let model_short = truncate_plain(status.model_label, 22);
+    let model_short = truncate_plain(status.model_label, 20);
     format!(
         "  {} {} · {} {} · {} {} · {} {} · {} {} · {}",
         theme.accent("⏵⏵"),
         status.perm_mode.badge(theme),
+        theme.dim("files:"),
+        theme.yellow_bold(&format!("{} modified", status.modified_files_count)),
         theme.dim("model:"),
         theme.cyan(&model_short),
         theme.dim("task:"),
         theme.cyan(task_str),
-        theme.dim("turns:"),
-        status.turns_count,
         theme.dim("cost:"),
         theme.green(&format!("${:.6}", status.session_cost_usd)),
-        theme.dim("/help · /history · /quit")
+        theme.dim("/files · /diff · /dashboard · /help")
     )
 }
 
@@ -760,11 +1060,32 @@ pub fn read_chat_input_box(
 pub struct ClaudeStepObserver<W: Write> {
     out: W,
     theme: Theme,
+    file_snapshots: std::collections::BTreeMap<String, (u32, String)>,
 }
 
 impl<W: Write> ClaudeStepObserver<W> {
     pub fn new(out: W, theme: Theme) -> Self {
-        Self { out, theme }
+        Self {
+            out,
+            theme,
+            file_snapshots: std::collections::BTreeMap::new(),
+        }
+    }
+
+    pub fn with_snapshots(
+        out: W,
+        theme: Theme,
+        file_snapshots: std::collections::BTreeMap<String, (u32, String)>,
+    ) -> Self {
+        Self {
+            out,
+            theme,
+            file_snapshots,
+        }
+    }
+
+    pub fn take_snapshots(&mut self) -> std::collections::BTreeMap<String, (u32, String)> {
+        std::mem::take(&mut self.file_snapshots)
     }
 
     pub fn into_inner(self) -> W {
@@ -939,41 +1260,15 @@ fn compact_json(v: &Value, max_chars: usize) -> String {
 
 impl<W: Write> KernelObserver for ClaudeStepObserver<W> {
     fn on_run_start(&mut self, task: &Task, _state: &TaskState) {
-        let mut lines = vec![
-            format!(
-                "{}  {}",
-                self.theme.dim("Task ID :"),
-                self.theme.cyan(&task.task_id)
-            ),
-            format!(
-                "{}  {}",
-                self.theme.dim("Goal    :"),
-                self.theme.bold(&truncate_plain(&task.goal, 64))
-            ),
-        ];
-        if !task.constraints.is_empty() {
-            lines.push(format!(
-                "{}  {}",
-                self.theme.dim("Pinned  :"),
-                self.theme
-                    .magenta(&truncate_plain(&task.constraints.join(" · "), 64))
-            ));
-        }
-        if !task.acceptance_rules.is_empty() {
-            lines.push(format!(
-                "{}  {}",
-                self.theme.dim("Accept  :"),
-                self.theme
-                    .yellow(&truncate_plain(&task.acceptance_rules.join(", "), 64))
-            ));
-        }
-        let header = render_box(
-            &self.theme.accent("✻ Task Execution"),
-            &lines,
-            68,
-            &self.theme,
+        let _ = writeln!(
+            self.out,
+            "\n  {} {} {} {}",
+            self.theme.dim("──"),
+            self.theme.accent("✻ Task Execution"),
+            self.theme.cyan(&task.task_id),
+            self.theme
+                .dim(&format!("· {} ──", truncate_plain(&task.goal, 48)))
         );
-        let _ = writeln!(self.out, "\n{header}");
         let _ = self.out.flush();
     }
 
@@ -1065,6 +1360,51 @@ impl<W: Write> KernelObserver for ClaudeStepObserver<W> {
                 self.theme.dim("side-effects:"),
                 self.theme.yellow(&result.side_effects.join(", "))
             );
+        }
+        // Inline File Modification / Diff Box when `file.write` succeeds
+        if _intent.kind == IntentKind::Execute
+            && result.operation_id.as_deref() == Some("file.write")
+            && result.status == ToolStatus::Ok
+        {
+            let args = _intent
+                .payload
+                .get("arguments")
+                .cloned()
+                .unwrap_or_else(|| json!({}));
+            let path = args
+                .get("path")
+                .and_then(|p| p.as_str())
+                .unwrap_or("artifact")
+                .to_string();
+            let content = args
+                .get("content")
+                .and_then(|c| c.as_str())
+                .unwrap_or("")
+                .to_string();
+            let (prev_ver, old_content) = match self.file_snapshots.get(&path) {
+                Some((v, old)) => (*v, Some(old.clone())),
+                None => (0, None),
+            };
+            let new_ver = prev_ver + 1;
+            self.file_snapshots
+                .insert(path.clone(), (new_ver, content.clone()));
+            let (_, added, removed) = compute_line_diff(old_content.as_deref(), &content);
+            let change = FileChange {
+                task_id: _intent.task_id.clone(),
+                path,
+                artifact_ref: result
+                    .result_refs
+                    .first()
+                    .cloned()
+                    .unwrap_or_else(|| "artifact://local@1".into()),
+                version: new_ver,
+                old_content,
+                new_content: content,
+                added_lines: added,
+                removed_lines: removed,
+            };
+            let diff_box = render_file_diff_box(&change, 12, 4, &self.theme);
+            let _ = writeln!(self.out, "{diff_box}");
         }
         if let Some(diag) = &result.diagnostic {
             let code = diag
@@ -1883,16 +2223,31 @@ pub fn render_doctor_card(app: &App, perm_mode: PermissionMode, theme: &Theme) -
 
 pub fn render_help_card(theme: &Theme) -> String {
     let lines = vec![
-        theme.bold("Execution & AI Conversation"),
+        theme.bold("Conversation, Commands & Modified Files (Main Interface)"),
         format!(
             "  {:<28} {}",
             theme.cyan("<type any message>"),
-            "Talk directly with sfai AI via the self-routing decision kernel"
+            "Talk directly with sfai AI (answers, commands, or modifies files)"
+        ),
+        format!(
+            "  {:<28} {}",
+            theme.cyan("/files"),
+            "List all files created or modified in the workspace with +add/-del stats"
+        ),
+        format!(
+            "  {:<28} {}",
+            theme.cyan("/diff [path]"),
+            "Show numbered line-by-line + / - diff for modified file(s)"
         ),
         format!(
             "  {:<28} {}",
             theme.cyan("/history"),
             "Show multi-turn User <-> AI conversation dialog history"
+        ),
+        format!(
+            "  {:<28} {}",
+            theme.cyan("/dashboard"),
+            "Refresh the compact Top Dashboard HUD (Context, Wiki, Files, Cost)"
         ),
         format!(
             "  {:<28} {}",

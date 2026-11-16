@@ -37,6 +37,7 @@ issues **SF-001 – SF-014** (milestones M0–M3 core), written in Rust
 | Interfaces | CLI (`sfai run/resume/status/inspect/context/capabilities/skills/wiki/verify/export-trace`) |
 | API (M7) | local HTTP + SSE service (`sfai serve`): tasks, events, run/cancel, artifacts, trace, wiki, verify |
 | Research (M8) | offline sparse-context harness (`sfai eval`): 5 context policies, success/recall/constraint/token/cost metrics, JSON+Markdown reports |
+| Benchmark (M8+) | agent framework benchmark (`sfai bench`): tool-use / dataset / long-horizon / edge-case suites × 5 ablations; success, correctness, false-success, latency p50/p95, tokens, cost |
 
 Not yet (tracked in the debug reports / plan): end-to-end acceptance against a
 real hosted model (offline fakes + mock HTTP only so far), OS-level sandboxing
@@ -55,6 +56,8 @@ cargo run -- export-trace <task_id>
 cargo run -- wiki summary <task_id>             # M4 derived knowledge
 cargo run -- skills list --skills skills         # M5 skill discovery (metadata only)
 cargo run -- eval --size 12                      # M8 offline evaluation harness
+cargo run -- bench --size 4                     # agent framework benchmark (all suites/ablations)
+cargo run -- bench --suite dataset --ablation none --out /tmp/bench.json
 ```
 
 ## HTTP API (for the UI)
@@ -88,6 +91,15 @@ route except `/api/health` requires `Authorization: Bearer <token>`):
 Duplicate runs of the same task are rejected with `409`; the kernel checks the
 cancel flag each step, so cancelled tasks end in `cancelled` rather than
 silently finishing.
+
+## Agent framework benchmark
+
+`sfai bench` measures the framework end-to-end (kernel, tools, stores,
+verification, Wiki) on four suites and five ablations, reporting success,
+ground-truth correctness, **false-success**, p50/p95 latency, input/output
+tokens, and cost. Protocol and v0.1 baseline:
+[`docs/benchmark-spec.md`](docs/benchmark-spec.md). Archived reports:
+`evals/reports/`.
 
 ### Interactive session
 

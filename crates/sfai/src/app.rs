@@ -46,6 +46,9 @@ pub struct App {
     pub trace_dir: PathBuf,
     pub side_effect_log: Arc<Mutex<Vec<String>>>,
     pub tool_counts: Arc<Mutex<std::collections::BTreeMap<String, u32>>>,
+    /// Ablation switches (default: full framework behavior).
+    pub enforce_acceptance: bool,
+    pub wiki_compile_enabled: bool,
 }
 
 pub fn build_app(storage_root: impl AsRef<Path>) -> Result<App> {
@@ -124,6 +127,8 @@ pub fn build_app_with_options(
         trace_dir,
         side_effect_log,
         tool_counts,
+        enforce_acceptance: true,
+        wiki_compile_enabled: true,
     })
 }
 
@@ -192,13 +197,16 @@ impl App {
             &self.skills,
             &tracer,
         );
+        kernel = kernel.with_acceptance_enforcement(self.enforce_acceptance);
         if let Some(flag) = cancel {
             kernel = kernel.with_cancel_flag(flag);
         }
         let result = kernel.run_task_observed(task_id, max_steps, observer)?;
         // M4: incremental Wiki compilation is best-effort and never affects
         // task authority (it writes only to wiki tables).
-        let _ = self.wiki.compile_task(task_id);
+        if self.wiki_compile_enabled {
+            let _ = self.wiki.compile_task(task_id);
+        }
         tracer.record(task_id, "cost", result.cost.clone())?;
         tracer.record(
             task_id,

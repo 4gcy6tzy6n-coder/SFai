@@ -17,7 +17,7 @@ use crate::contracts::{
 };
 use crate::core::context_envelope::EnvelopeBuilder;
 use crate::core::model_adapter::ModelAdapter;
-use crate::core::termination::AcceptanceEvaluator;
+use crate::core::termination::{AcceptanceAssessment, AcceptanceEvaluator};
 use crate::error::{Result, SfaiError};
 use crate::ids::new_decision_id;
 use crate::runtime::broker::ToolBroker;
@@ -105,6 +105,7 @@ pub struct DecisionKernel<'a> {
     cost: CostLedger,
     activated_skills: BTreeMap<String, SkillActivation>,
     cancel_flag: Option<Arc<AtomicBool>>,
+    enforce_acceptance: bool,
 }
 
 impl<'a> DecisionKernel<'a> {
@@ -137,12 +138,19 @@ impl<'a> DecisionKernel<'a> {
             cost: CostLedger::new(),
             activated_skills: BTreeMap::new(),
             cancel_flag: None,
+            enforce_acceptance: true,
         }
     }
 
     /// Cooperative cancellation: checked at the top of every step.
     pub fn with_cancel_flag(mut self, flag: Arc<AtomicBool>) -> Self {
         self.cancel_flag = Some(flag);
+        self
+    }
+
+    /// Ablation switch: skip acceptance and mandatory-verification gates.
+    pub fn with_acceptance_enforcement(mut self, enabled: bool) -> Self {
+        self.enforce_acceptance = enabled;
         self
     }
 
@@ -753,7 +761,11 @@ impl<'a> DecisionKernel<'a> {
         intent: &ActionIntent,
     ) -> Result<(bool, Option<TaskRunResult>)> {
         let state = self.task_store.state(task_id)?;
-        let assessment = self.acceptance.evaluate_if_required(task, &state)?;
+        let assessment = if self.enforce_acceptance {
+            self.acceptance.evaluate_if_required(task, &state)?
+        } else {
+            AcceptanceAssessment::default()
+        };
         let answer = intent
             .payload
             .get("text")
@@ -775,7 +787,7 @@ impl<'a> DecisionKernel<'a> {
         }
         // Risk-based mandatory validation: a consequential action must be
         // followed by a recorded verification before the task may complete.
-        if self.mandatory_verification_missing(task_id)? {
+        if self.enforce_acceptance && self.mandatory_verification_missing(task_id)? {
             let issue = json!({
                 "key": "mandatory_verification",
                 "criterion": "mandatory_verification",
