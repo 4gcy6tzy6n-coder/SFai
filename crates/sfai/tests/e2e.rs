@@ -125,3 +125,35 @@ fn cli_runs_offline_fixture() {
     let trace: Value = serde_json::from_slice(&out3.stdout).expect("trace json");
     assert!(!trace.as_array().unwrap_or(&vec![]).is_empty());
 }
+
+#[test]
+fn bare_cli_starts_interactive_session() {
+    let dir = temp_root();
+    let storage = dir.path().to_str().expect("utf8").to_string();
+    let bin = env!("CARGO_BIN_EXE_sfai");
+    let mut child = std::process::Command::new(bin)
+        .args(["--storage", &storage])
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::piped())
+        .spawn()
+        .expect("spawn interactive");
+    {
+        use std::io::Write;
+        let stdin = child.stdin.as_mut().expect("stdin");
+        stdin
+            .write_all(b"/run direct-answer\n/quit\n")
+            .expect("write commands");
+    }
+    let out = child.wait_with_output().expect("wait");
+    assert!(
+        out.status.success(),
+        "stderr: {}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&out.stdout);
+    assert!(stdout.contains("interactive session"));
+    assert!(stdout.contains("completed"), "stdout: {stdout}");
+    assert!(stdout.contains("task="));
+    assert!(stdout.contains("bye."));
+}

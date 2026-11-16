@@ -21,7 +21,7 @@ struct Cli {
     #[arg(long, global = true)]
     skills: Option<PathBuf>,
     #[command(subcommand)]
-    cmd: Cmd,
+    cmd: Option<Cmd>,
 }
 
 #[derive(Subcommand)]
@@ -123,7 +123,10 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
         cli.skills.clone(),
     )
     .map_err(|e| e.to_string())?;
-    match cli.cmd {
+    let Some(cmd) = cli.cmd else {
+        return interactive(&app);
+    };
+    match cmd {
         Cmd::Run {
             fixture,
             goal,
@@ -331,4 +334,157 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
             }
         },
     }
+}
+
+// ---- interactive session (bare `sfai`) ----
+
+const HELP: &str = "\nCommands:\n  /run <fixture>   run an offline fixture (direct-answer|tool-use|failed-tool|approval|context-retrieval)\n  /fixtures        list fixtures\n  /goal <text>     run a goal with the configured provider (or just type the goal)\n  /status          last task status\n  /trace <task>    export trace for a task\n  /wiki <task>     derived Wiki summary\n  /skills          list installed skills\n  /help            this help\n  /quit            exit\n";
+
+fn interactive(app: &App) -> Result<u8, String> {
+    use std::io::{BufRead, Write};
+    println!("System for future ai — interactive session");
+    println!("Type a goal and press Enter to run it, or /help for commands.");
+    println!("Offline demo: /run tool-use\n");
+
+    let mut last_task: Option<String> = None;
+    let stdin = std::io::stdin();
+    loop {
+        print!("sfai> ");
+        std::io::stdout().flush().map_err(|e| e.to_string())?;
+        let mut line = String::new();
+        let read = stdin
+            .lock()
+            .read_line(&mut line)
+            .map_err(|e| e.to_string())?;
+        if read == 0 {
+            println!();
+            break;
+        }
+        let input = line.trim();
+        if input.is_empty() {
+            continue;
+        }
+        if matches!(input, "/quit" | "/exit" | "quit" | "exit") {
+            break;
+        }
+        if input == "/help" {
+            println!("{HELP}");
+            continue;
+        }
+        if input == "/fixtures" {
+            println!("fixtures: {}", FIXTURE_NAMES.join(", "));
+            continue;
+        }
+        if let Some(name) = input.strip_prefix("/run ") {
+            match run_fixture_interactive(app, name.trim()) {
+                Ok(task_id) => last_task = Some(task_id),
+                Err(err) => println!("error: {err}"),
+            }
+            continue;
+        }
+        if input == "/status" {
+            match &last_task {
+                Some(task_id) => match app.task_store.state(task_id) {
+                    Ok(state) => println!(
+                        "  task={task_id}  status={}  outputs={}  issues={}",
+                        state.status.as_str(),
+                        state.completed_outputs.len(),
+                        state.open_issues.len()
+                    ),
+                    Err(err) => println!("error: {err}"),
+                },
+                None => println!("no task yet; run a goal or /run <fixture>"),
+            }
+            continue;
+        }
+        if let Some(task_id) = input.strip_prefix("/trace ") {
+            match app.export_trace(task_id.trim()) {
+                Ok(entries) => println!("  trace entries: {}", entries.len()),
+                Err(err) => println!("error: {err}"),
+            }
+            continue;
+        }
+        if let Some(task_id) = input.strip_prefix("/wiki ") {
+            match app.wiki.summary(task_id.trim()) {
+                Ok(summary) => println!(
+                    "{}",
+                    serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?
+                ),
+                Err(err) => println!("error: {err}"),
+            }
+            continue;
+        }
+        if input == "/skills" {
+            let manifests = app.skills.discover("", 50);
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&manifests).map_err(|e| e.to_string())?
+            );
+            continue;
+        }
+        let goal = input.strip_prefix("/goal ").unwrap_or(input).to_string();
+        match run_goal_interactive(app, &goal) {
+            Ok(task_id) => last_task = Some(task_id),
+            Err(err) => println!("error: {err}"),
+        }
+    }
+    println!("bye.");
+    Ok(0)
+}
+
+fn run_fixture_interactive(app: &App, name: &str) -> Result<String, String> {
+    let spec = get_fixture(name).map_err(|e| e.to_string())?;
+    let task = app
+        .create_task(
+            &spec.goal,
+            spec.constraints.clone(),
+            spec.acceptance_rules.clone(),
+            Some(spec.budget.clone()),
+        )
+        .map_err(|e| e.to_string())?;
+    if let Some(setup) = spec.setup {
+        setup(app, &task).map_err(|e| e.to_string())?;
+    }
+    let mut model = (spec.build_model)();
+    let result = app
+        .run(model.as_mut(), &task.task_id, 50)
+        .map_err(|e| e.to_string())?;
+    print_summary(&result);
+    Ok(task.task_id)
+}
+
+fn run_goal_interactive(app: &App, goal: &str) -> Result<String, String> {
+    let task = app
+        .create_task(goal, vec![], vec![], Some(Budget::default()))
+        .map_err(|e| e.to_string())?;
+    let mut model = OpenAICompatibleAdapter::from_env();
+    match app.run(&mut model, &task.task_id, 50) {
+        Ok(result) => {
+            print_summary(&result);
+            Ok(result.task_id)
+        }
+        Err(err) => Err(format!(
+            "{err}\n(hint: configure SFAI_MODEL_BASE_URL / SFAI_MODEL_API_KEY / SFAI_MODEL_NAME, or use /run <fixture> offline)"
+        )),
+    }
+}
+
+fn print_summary(result: &sfai::core::decision_kernel::TaskRunResult) {
+    let cost_usd = result
+        .cost
+        .get("cost_usd")
+        .and_then(|c| c.as_f64())
+        .unwrap_or(0.0);
+    let tool_calls = result
+        .cost
+        .get("tool_calls")
+        .and_then(|c| c.as_u64())
+        .unwrap_or(0);
+    println!(
+        "  task={}  status={}  steps={}  tool_calls={}  cost=${cost_usd:.6}",
+        result.task_id,
+        result.status.as_str(),
+        result.steps,
+        tool_calls
+    );
 }

@@ -40,12 +40,23 @@ per-tenant ACL filtering (M7), learned sparse indexer (M8), web UI.
 
 ```bash
 cargo test                        # offline correctness suite, no API keys
+cargo run                         # bare sfai: interactive session
 cargo run -- run --fixture tool-use
 cargo run -- run --fixture direct-answer
 cargo run -- status <task_id>
 cargo run -- export-trace <task_id>
 cargo run -- wiki summary --task <task_id>       # M4 derived knowledge
 cargo run -- skills list --skills skills         # M5 skill discovery (metadata only)
+```
+
+### Interactive session
+
+Bare `sfai` (no subcommand) opens a small REPL:
+
+```text
+sfai> /run tool-use          # run an offline fixture
+sfai> <type any goal>        # run it with the configured provider
+sfai> /status /trace <id> /wiki <id> /skills /fixtures /help /quit
 ```
 
 Every run is fully offline and deterministic. Real-model runs use any
