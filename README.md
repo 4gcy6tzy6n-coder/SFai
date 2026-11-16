@@ -45,7 +45,7 @@ cargo run -- run --fixture tool-use
 cargo run -- run --fixture direct-answer
 cargo run -- status <task_id>
 cargo run -- export-trace <task_id>
-cargo run -- wiki summary --task <task_id>       # M4 derived knowledge
+cargo run -- wiki summary <task_id>             # M4 derived knowledge
 cargo run -- skills list --skills skills         # M5 skill discovery (metadata only)
 ```
 

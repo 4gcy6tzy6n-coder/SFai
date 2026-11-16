@@ -17,7 +17,7 @@
 cargo test                       # 48 个离线测试，无 API key
 cargo clippy --all-targets        # 0 warnings
 cargo fmt --all --check           # clean
-cargo run -- wiki compile --task <task_id>
+cargo run -- wiki compile <task_id>
 cargo run -- skills list --skills skills
 ```
 
