@@ -163,6 +163,18 @@ enum Cmd {
         #[arg(long, default_value = "40,80,160")]
         history: String,
     },
+    /// Concurrency/throughput benchmark (Rust threads vs GIL limits)
+    BenchConcurrency {
+        /// Comma worker counts, e.g. 1,4,8,16
+        #[arg(long, default_value = "1,4,8,16")]
+        workers: String,
+        /// Tasks per worker (each a full scripted kernel run in fresh storage)
+        #[arg(long, default_value_t = 10)]
+        tasks: usize,
+        /// CPU-bound mode: envelope serialize/parse/hash iterations per task (0 = full kernel task)
+        #[arg(long, default_value_t = 0)]
+        cpu_iters: usize,
+    },
     /// Serve the local HTTP API for the UI (tasks, events/SSE, artifacts, wiki)
     Serve {
         /// TCP port (default 8765)
@@ -747,6 +759,102 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
             }
             std::fs::write(&path, json_text).map_err(|e| e.to_string())?;
             eprintln!("report written to {}", path.display());
+            Ok(0)
+        }
+        Cmd::BenchConcurrency {
+            workers,
+            tasks,
+            cpu_iters,
+        } => {
+            let counts: Vec<usize> = workers
+                .split(',')
+                .map(|w| w.trim().parse().map_err(|e| format!("bad worker count {w}: {e}")))
+                .collect::<Result<_, _>>()
+                .map_err(|e: String| e)?;
+            println!("| workers | tasks | wall ms | tasks/sec | ms/task |");
+            println!("|---|---|---|---|---|");
+            for worker_count in counts {
+                let wall = std::time::Instant::now();
+                let mut handles = Vec::new();
+                for w in 0..worker_count {
+                    let tpc = tasks;
+                    let iters = cpu_iters;
+                    handles.push(std::thread::spawn(move || {
+                        for i in 0..tpc {
+                            if iters > 0 {
+                                // CPU-bound: same work as one kernel step at
+                                // 50k-token envelope scale, repeated.
+                                let refs: Vec<String> = (0..300)
+                                    .map(|r| format!("source://src_{:04}@1", r))
+                                    .collect();
+                                let recent: Vec<serde_json::Value> = (0..5)
+                                    .map(|_| {
+                                        serde_json::json!({
+                                            "preview": "x".repeat(1200),
+                                            "refs": &refs[..30],
+                                        })
+                                    })
+                                    .collect();
+                                let history: Vec<serde_json::Value> = (0..300)
+                                    .map(|h| {
+                                        serde_json::json!({"id": h, "body": "note ".repeat(30)})
+                                    })
+                                    .collect();
+                                let env = serde_json::json!({
+                                    "goal": "find sources and write a cited report",
+                                    "active_refs": refs,
+                                    "recent_results": recent,
+                                    "history": history,
+                                });
+                                for _ in 0..iters {
+                                    let text = serde_json::to_string(&env).unwrap();
+                                    let parsed: serde_json::Value =
+                                        serde_json::from_str(&text).unwrap();
+                                    let _ = sfai::ids::canonical_hash(&parsed);
+                                }
+                            } else {
+                                let dir = std::env::temp_dir().join(format!(
+                                    "sfai-conc-{}-{}-{}",
+                                    std::process::id(),
+                                    w,
+                                    i
+                                ));
+                                let _ = std::fs::remove_dir_all(&dir);
+                                if let Ok(app) = sfai::app::build_app(&dir) {
+                                    if let Ok(spec) = sfai::fixtures::get_fixture("dataset") {
+                                        let gt =
+                                            sfai::benchmark::generate_tasks_seeded("dataset", 1, 0)
+                                                .remove(0);
+                                        if let Ok(task) = app.create_task(
+                                            &gt.goal,
+                                            gt.constraints.clone(),
+                                            gt.acceptance_rules.clone(),
+                                            Some(Default::default()),
+                                        ) {
+                                            let mut model = (spec.build_model)();
+                                            let _ = app.run(model.as_mut(), &task.task_id, 20);
+                                        }
+                                    }
+                                }
+                                let _ = std::fs::remove_dir_all(&dir);
+                            }
+                        }
+                    }));
+                }
+                for h in handles {
+                    let _ = h.join();
+                }
+                let dt = wall.elapsed().as_secs_f64() * 1000.0;
+                let total = (worker_count * tasks) as f64;
+                println!(
+                    "| {} | {} | {:.1} | {:.1} | {:.2} |",
+                    worker_count,
+                    tasks,
+                    dt,
+                    total / (dt / 1000.0),
+                    dt / total
+                );
+            }
             Ok(0)
         }
         Cmd::Serve { port, bind } => {

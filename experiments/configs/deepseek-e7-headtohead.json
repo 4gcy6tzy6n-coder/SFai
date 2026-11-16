@@ -1,0 +1,13 @@
+{
+  "name": "e7-sfai-headtohead",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "price_in": 0.27,
+  "price_out": 1.10,
+  "suites": ["dataset", "tool-use"],
+  "ablations": ["none"],
+  "size": 3,
+  "repetitions": 2,
+  "seed": 0,
+  "note": "E7 head-to-head arm: sfai with same model/goals/seeds as the LangChain baseline"
+}
