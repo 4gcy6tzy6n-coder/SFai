@@ -12,7 +12,9 @@ use crate::authority::tasks::TaskStore;
 use crate::capabilities::registry::CapabilityRegistry;
 use crate::capabilities::skills::{SkillActivation, SkillRegistry};
 use crate::context::retrieval::ContextRetriever;
-use crate::contracts::{ActionIntent, ContextEnvelope, IntentKind, ModelResponse, Task};
+use crate::contracts::{
+    ActionIntent, ContextEnvelope, IntentKind, ModelResponse, Task, TaskState, ToolResult,
+};
 use crate::core::context_envelope::EnvelopeBuilder;
 use crate::core::model_adapter::ModelAdapter;
 use crate::core::termination::AcceptanceEvaluator;
@@ -26,12 +28,35 @@ use crate::verify::engine::VerificationEngine;
 use rusqlite::params;
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 
 pub const MAX_STEPS: usize = 50;
 pub const MAX_CONSECUTIVE_TOOL_ERRORS: u32 = 3;
 pub const MAX_ACCEPTANCE_RETRIES: u32 = 2;
 
-#[derive(Debug, Clone)]
+/// Lifecycle observer for streaming CLI / UI progress without coupling the
+/// decision kernel to any presentation layer.
+pub trait KernelObserver {
+    fn on_run_start(&mut self, _task: &Task, _state: &TaskState) {}
+    fn on_step_start(&mut self, _step: usize, _envelope: &ContextEnvelope) {}
+    fn on_decision(&mut self, _step: usize, _response: &ModelResponse) {}
+    fn on_tool_result(&mut self, _step: usize, _intent: &ActionIntent, _result: &ToolResult) {}
+    fn on_acceptance_blocked(
+        &mut self,
+        _step: usize,
+        _issues: &[Value],
+        _retry: u32,
+        _max_retries: u32,
+    ) {
+    }
+    fn on_run_end(&mut self, _result: &TaskRunResult) {}
+}
+
+pub struct NoopObserver;
+impl KernelObserver for NoopObserver {}
+
+#[derive(Debug, Clone, serde::Serialize)]
 pub struct TaskRunResult {
     pub task_id: String,
     pub status: crate::contracts::TaskStatus,
@@ -79,6 +104,7 @@ pub struct DecisionKernel<'a> {
     pub tracer: &'a Tracer,
     cost: CostLedger,
     activated_skills: BTreeMap<String, SkillActivation>,
+    cancel_flag: Option<Arc<AtomicBool>>,
 }
 
 impl<'a> DecisionKernel<'a> {
@@ -110,13 +136,32 @@ impl<'a> DecisionKernel<'a> {
             tracer,
             cost: CostLedger::new(),
             activated_skills: BTreeMap::new(),
+            cancel_flag: None,
         }
     }
 
+    /// Cooperative cancellation: checked at the top of every step.
+    pub fn with_cancel_flag(mut self, flag: Arc<AtomicBool>) -> Self {
+        self.cancel_flag = Some(flag);
+        self
+    }
+
     pub fn run_task(&mut self, task_id: &str, max_steps: usize) -> Result<TaskRunResult> {
+        let mut noop = NoopObserver;
+        self.run_task_observed(task_id, max_steps, &mut noop)
+    }
+
+    pub fn run_task_observed(
+        &mut self,
+        task_id: &str,
+        max_steps: usize,
+        observer: &mut dyn KernelObserver,
+    ) -> Result<TaskRunResult> {
         let mut task = self.task_store.load(task_id)?;
         if task.status.is_terminal() {
-            return Ok(self.finish_result(task_id, task.status.as_str()));
+            let result = self.finish_result(task_id, task.status.as_str());
+            observer.on_run_end(&result);
+            return Ok(result);
         }
         if task.status != crate::contracts::TaskStatus::Active {
             self.task_store.set_status(
@@ -126,17 +171,36 @@ impl<'a> DecisionKernel<'a> {
             )?;
         }
         task.status = crate::contracts::TaskStatus::Active;
+        let initial_state = self.task_store.state(task_id)?;
+        observer.on_run_start(&task, &initial_state);
 
         let mut steps = 0usize;
         let mut consecutive_tool_errors = 0u32;
         let mut acceptance_retries = 0u32;
 
         while steps < max_steps {
+            if let Some(flag) = &self.cancel_flag {
+                if flag.load(Ordering::Relaxed) {
+                    self.task_store.set_status(
+                        task_id,
+                        crate::contracts::TaskStatus::Cancelled,
+                        "cancelled by user",
+                    )?;
+                    let mut result = self.finish_result(task_id, "cancelled");
+                    result.steps = steps;
+                    result.cost = self.cost_value();
+                    self.tracer
+                        .record(task_id, "final", json!({"status": "cancelled"}))?;
+                    observer.on_run_end(&result);
+                    return Ok(result);
+                }
+            }
             steps += 1;
             let state = self.task_store.state(task_id)?;
             let active_skills: Vec<SkillActivation> =
                 self.activated_skills.values().cloned().collect();
             let envelope = self.envelope_builder.build(&task, &state, &active_skills)?;
+            observer.on_step_start(steps, &envelope);
             let response = match self.decide(task_id, &envelope) {
                 Ok(r) => r,
                 Err(exc) => {
@@ -151,6 +215,9 @@ impl<'a> DecisionKernel<'a> {
             let mut intent = response.intent.clone();
             // Runtime authority: the model cannot target another task.
             intent.task_id = task_id.to_string();
+            let mut observed_response = response.clone();
+            observed_response.intent = intent.clone();
+            observer.on_decision(steps, &observed_response);
             self.task_store.record_decision_started(
                 task_id,
                 intent.kind.as_str(),
@@ -175,10 +242,18 @@ impl<'a> DecisionKernel<'a> {
                         let mut result = result.unwrap();
                         result.steps = steps;
                         result.cost = self.cost_value();
+                        observer.on_run_end(&result);
                         return Ok(result);
                     }
                     acceptance_retries += 1;
                     consecutive_tool_errors = 0;
+                    let open_issues = self.task_store.state(task_id)?.open_issues;
+                    observer.on_acceptance_blocked(
+                        steps,
+                        &open_issues,
+                        acceptance_retries,
+                        MAX_ACCEPTANCE_RETRIES,
+                    );
                     if acceptance_retries > MAX_ACCEPTANCE_RETRIES {
                         self.task_store.set_status(
                             task_id,
@@ -191,11 +266,12 @@ impl<'a> DecisionKernel<'a> {
                             .get("text")
                             .and_then(|t| t.as_str())
                             .map(|s| s.to_string());
-                        result.open_issues = self.task_store.state(task_id)?.open_issues;
+                        result.open_issues = open_issues;
                         result.steps = steps;
                         result.cost = self.cost_value();
                         self.tracer
                             .record(task_id, "final", json!({"status": "blocked"}))?;
+                        observer.on_run_end(&result);
                         return Ok(result);
                     }
                     continue;
@@ -209,6 +285,7 @@ impl<'a> DecisionKernel<'a> {
                     let mut result = self.finish_result(task_id, "paused");
                     result.steps = steps;
                     result.cost = self.cost_value();
+                    observer.on_run_end(&result);
                     return Ok(result);
                 }
                 IntentKind::AskUser => {
@@ -231,11 +308,13 @@ impl<'a> DecisionKernel<'a> {
                     result.open_issues = self.task_store.state(task_id)?.open_issues;
                     result.steps = steps;
                     result.cost = self.cost_value();
+                    observer.on_run_end(&result);
                     return Ok(result);
                 }
                 _ => {
                     let tool_result = self.dispatch(task_id, &intent, &state)?;
                     self.apply_result(task_id, &intent, &tool_result)?;
+                    observer.on_tool_result(steps, &intent, &tool_result);
                     if tool_result.status == crate::contracts::ToolStatus::Error {
                         consecutive_tool_errors += 1;
                         if consecutive_tool_errors >= MAX_CONSECUTIVE_TOOL_ERRORS {
@@ -254,6 +333,7 @@ impl<'a> DecisionKernel<'a> {
                                 "final",
                                 json!({"status": "blocked", "reason": "tool errors exceeded bounded retry"}),
                             )?;
+                            observer.on_run_end(&result);
                             return Ok(result);
                         }
                     } else {
@@ -273,6 +353,7 @@ impl<'a> DecisionKernel<'a> {
                             "final",
                             json!({"status": "blocked", "reason": reason}),
                         )?;
+                        observer.on_run_end(&result);
                         return Ok(result);
                     }
                 }
@@ -287,6 +368,7 @@ impl<'a> DecisionKernel<'a> {
         let mut result = TaskRunResult::blocked(task_id);
         result.steps = steps;
         result.cost = self.cost_value();
+        observer.on_run_end(&result);
         Ok(result)
     }
 
@@ -423,7 +505,7 @@ impl<'a> DecisionKernel<'a> {
             return self.dispatch_retrieve(task_id, intent);
         }
         if intent.kind == IntentKind::Verify {
-            let criteria: Vec<String> = intent
+            let mut criteria: Vec<String> = intent
                 .payload
                 .get("criteria")
                 .and_then(|c| c.as_array())
@@ -433,6 +515,14 @@ impl<'a> DecisionKernel<'a> {
                         .collect()
                 })
                 .unwrap_or_default();
+            if criteria.is_empty() {
+                if let Ok(task) = self.task_store.load(task_id) {
+                    criteria = task.acceptance_rules;
+                }
+            }
+            if criteria.is_empty() {
+                criteria.push("source_count_at_least:0".to_string());
+            }
             let results = self.verifier.verify(task_id, &criteria)?;
             for result in &results {
                 self.task_store.apply(

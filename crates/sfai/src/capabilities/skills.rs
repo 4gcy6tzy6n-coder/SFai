@@ -8,9 +8,9 @@
 use crate::error::{Result, SfaiError};
 use crate::ids::make_ref;
 use serde::{Deserialize, Serialize};
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
 
 pub const MAX_INSTRUCTIONS_CHARS: usize = 4000;
 
@@ -55,7 +55,7 @@ pub struct SkillActivation {
 #[derive(Default)]
 pub struct SkillRegistry {
     skills: BTreeMap<String, Skill>,
-    pub activations: RefCell<Vec<String>>,
+    pub activations: Mutex<Vec<String>>,
 }
 
 impl SkillRegistry {
@@ -124,7 +124,10 @@ impl SkillRegistry {
             .skills
             .get(name)
             .ok_or_else(|| SfaiError::NotFound(format!("unknown skill: {name}")))?;
-        self.activations.borrow_mut().push(name.to_string());
+        self.activations
+            .lock()
+            .expect("skills mutex poisoned")
+            .push(name.to_string());
         let instructions: String = skill
             .instructions
             .chars()

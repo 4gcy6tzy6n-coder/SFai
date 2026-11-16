@@ -22,25 +22,24 @@ use crate::storage::event_ledger::{now, EventLedger};
 use crate::storage::objects::ObjectStore;
 use rusqlite::params;
 use serde_json::{json, Value};
-use std::cell::RefCell;
 use std::path::PathBuf;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 pub struct ToolBroker {
-    pub registry: Rc<CapabilityRegistry>,
+    pub registry: Arc<CapabilityRegistry>,
     pub policy: PolicyEngine,
-    pub approvals: Rc<dyn ApprovalProvider>,
+    pub approvals: Arc<dyn ApprovalProvider>,
     pub objects: ObjectStore,
     pub ledger: EventLedger,
     pub workspace_root: PathBuf,
-    pub invocations: RefCell<Vec<String>>,
+    pub invocations: Mutex<Vec<String>>,
 }
 
 impl ToolBroker {
     pub fn new(
-        registry: Rc<CapabilityRegistry>,
+        registry: Arc<CapabilityRegistry>,
         policy: PolicyEngine,
-        approvals: Rc<dyn ApprovalProvider>,
+        approvals: Arc<dyn ApprovalProvider>,
         objects: ObjectStore,
         ledger: EventLedger,
         workspace_root: PathBuf,
@@ -52,7 +51,7 @@ impl ToolBroker {
             objects,
             ledger,
             workspace_root,
-            invocations: RefCell::new(Vec::new()),
+            invocations: Mutex::new(Vec::new()),
         }
     }
 
@@ -161,7 +160,10 @@ impl ToolBroker {
             task_state: state.clone(),
             workspace_root: self.workspace_root.join(&intent.task_id),
         };
-        self.invocations.borrow_mut().push(operation_id.clone());
+        self.invocations
+            .lock()
+            .expect("broker mutex poisoned")
+            .push(operation_id.clone());
 
         let exec_result = match self.registry.handler_for(&operation_id) {
             Ok(handler) => handler(&mut ctx, &args),

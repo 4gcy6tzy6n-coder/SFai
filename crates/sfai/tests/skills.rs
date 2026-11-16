@@ -9,18 +9,17 @@ use sfai::authority::approvals::DenyAllApprovals;
 use sfai::contracts::{ActionIntent, ContextEnvelope, IntentKind, ModelResponse, ModelUsage};
 use sfai::core::action_intents::intent;
 use sfai::core::model_adapter::{ModelAdapter, ModelError};
-use std::cell::RefCell;
 use std::path::Path;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 struct CaptureModel {
-    envelopes: Rc<RefCell<Vec<ContextEnvelope>>>,
+    envelopes: Arc<Mutex<Vec<ContextEnvelope>>>,
     steps: Vec<ActionIntent>,
     cursor: usize,
 }
 
 impl CaptureModel {
-    fn new(steps: Vec<ActionIntent>, envelopes: Rc<RefCell<Vec<ContextEnvelope>>>) -> Self {
+    fn new(steps: Vec<ActionIntent>, envelopes: Arc<Mutex<Vec<ContextEnvelope>>>) -> Self {
         Self {
             envelopes,
             steps,
@@ -35,7 +34,7 @@ impl ModelAdapter for CaptureModel {
     }
 
     fn decide(&mut self, envelope: &ContextEnvelope) -> Result<ModelResponse, ModelError> {
-        self.envelopes.borrow_mut().push(envelope.clone());
+        self.envelopes.lock().unwrap().push(envelope.clone());
         if self.cursor >= self.steps.len() {
             return Err(ModelError::Provider("capture model exhausted".into()));
         }
@@ -91,7 +90,7 @@ fn inactive_skill_never_reaches_the_envelope() {
     write_skill(skills_dir.path(), "research", "RESEARCH-ONLY-INSTRUCTIONS");
     let app = build_app_with_options(
         storage.path(),
-        Rc::new(DenyAllApprovals),
+        Arc::new(DenyAllApprovals),
         Some(skills_dir.path().to_path_buf()),
     )
     .expect("app");
@@ -99,11 +98,11 @@ fn inactive_skill_never_reaches_the_envelope() {
         .create_task("answer directly", vec![], vec![], None)
         .expect("task");
 
-    let captures = Rc::new(RefCell::new(Vec::new()));
+    let captures = Arc::new(Mutex::new(Vec::new()));
     let mut model = CaptureModel::new(vec![respond("hi")], captures.clone());
     app.run(&mut model, &task.task_id, 10).expect("run");
 
-    let envelopes = captures.borrow();
+    let envelopes = captures.lock().unwrap();
     assert_eq!(envelopes.len(), 1);
     assert!(envelopes[0].active_skills.is_empty());
     let raw = serde_json::to_string(&envelopes[0]).expect("serialize envelope");
@@ -120,7 +119,7 @@ fn activation_loads_instructions_into_working_set() {
     write_skill(skills_dir.path(), "research", "Step 1: cite sources.");
     let app = build_app_with_options(
         storage.path(),
-        Rc::new(DenyAllApprovals),
+        Arc::new(DenyAllApprovals),
         Some(skills_dir.path().to_path_buf()),
     )
     .expect("app");
@@ -128,14 +127,14 @@ fn activation_loads_instructions_into_working_set() {
         .create_task("research a topic", vec![], vec![], None)
         .expect("task");
 
-    let captures = Rc::new(RefCell::new(Vec::new()));
+    let captures = Arc::new(Mutex::new(Vec::new()));
     let mut model = CaptureModel::new(
         vec![activate("research"), respond("done")],
         captures.clone(),
     );
     app.run(&mut model, &task.task_id, 10).expect("run");
 
-    let envelopes = captures.borrow();
+    let envelopes = captures.lock().unwrap();
     assert!(envelopes[0].active_skills.is_empty());
     assert_eq!(envelopes[1].active_skills.len(), 1);
     let skill = &envelopes[1].active_skills[0];
@@ -145,7 +144,7 @@ fn activation_loads_instructions_into_working_set() {
         "activation pins the package version"
     );
     assert!(skill.instructions.contains("Step 1: cite sources."));
-    assert_eq!(app.skills.activations.borrow().len(), 1);
+    assert_eq!(app.skills.activations.lock().unwrap().len(), 1);
 }
 
 #[test]
@@ -156,7 +155,7 @@ fn a_run_can_switch_between_domains_and_state_is_per_run() {
     write_skill(skills_dir.path(), "writing", "WRITING-INSTRUCTIONS");
     let app = build_app_with_options(
         storage.path(),
-        Rc::new(DenyAllApprovals),
+        Arc::new(DenyAllApprovals),
         Some(skills_dir.path().to_path_buf()),
     )
     .expect("app");
@@ -164,14 +163,14 @@ fn a_run_can_switch_between_domains_and_state_is_per_run() {
         .create_task("research then write", vec![], vec![], None)
         .expect("task");
 
-    let captures = Rc::new(RefCell::new(Vec::new()));
+    let captures = Arc::new(Mutex::new(Vec::new()));
     let mut model = CaptureModel::new(
         vec![activate("research"), activate("writing"), respond("report")],
         captures.clone(),
     );
     app.run(&mut model, &task.task_id, 10).expect("run");
 
-    let envelopes = captures.borrow();
+    let envelopes = captures.lock().unwrap();
     assert_eq!(envelopes.len(), 3);
     let names: Vec<String> = envelopes[2]
         .active_skills
@@ -192,10 +191,10 @@ fn a_run_can_switch_between_domains_and_state_is_per_run() {
     let task2 = app
         .create_task("unrelated question", vec![], vec![], None)
         .expect("task2");
-    let captures2 = Rc::new(RefCell::new(Vec::new()));
+    let captures2 = Arc::new(Mutex::new(Vec::new()));
     let mut model2 = CaptureModel::new(vec![respond("done")], captures2.clone());
     app.run(&mut model2, &task2.task_id, 10).expect("run2");
-    assert!(captures2.borrow()[0].active_skills.is_empty());
+    assert!(captures2.lock().unwrap()[0].active_skills.is_empty());
 }
 
 #[test]

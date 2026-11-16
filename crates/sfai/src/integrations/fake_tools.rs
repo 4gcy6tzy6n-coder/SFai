@@ -12,9 +12,8 @@ use crate::contracts::{CapabilityManifest, CapabilityOperation, RiskClass, Trust
 use crate::error::SfaiError;
 use crate::ids::{artifact_ref, refs_in_text, source_ref};
 use serde_json::{json, Value};
-use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 pub const CANNED_CLAIMS: [(&str, &str, &str); 3] = [
     (
@@ -56,16 +55,16 @@ fn tool_err(e: SfaiError) -> ToolExecError {
 }
 
 pub struct FixtureWiring {
-    pub side_effect_log: Rc<RefCell<Vec<String>>>,
-    pub tool_counts: Rc<RefCell<BTreeMap<String, u32>>>,
+    pub side_effect_log: Arc<Mutex<Vec<String>>>,
+    pub tool_counts: Arc<Mutex<BTreeMap<String, u32>>>,
 }
 
 pub fn register_fixture_tools(
     registry: &mut CapabilityRegistry,
     retriever: &ContextRetriever,
 ) -> FixtureWiring {
-    let side_effect_log: Rc<RefCell<Vec<String>>> = Rc::new(RefCell::new(Vec::new()));
-    let tool_counts: Rc<RefCell<BTreeMap<String, u32>>> = Rc::new(RefCell::new(BTreeMap::new()));
+    let side_effect_log: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+    let tool_counts: Arc<Mutex<BTreeMap<String, u32>>> = Arc::new(Mutex::new(BTreeMap::new()));
 
     let mut handlers: HashMap<String, Handler> = HashMap::new();
 
@@ -76,7 +75,8 @@ pub fn register_fixture_tools(
             "web.search".into(),
             Box::new(move |ctx, args| {
                 *counts
-                    .borrow_mut()
+                    .lock()
+                    .expect("counts mutex poisoned")
                     .entry("web.search".to_string())
                     .or_insert(0) += 1;
                 let query = args.get("query").and_then(|q| q.as_str()).unwrap_or("");
@@ -149,7 +149,8 @@ pub fn register_fixture_tools(
             "file.write".into(),
             Box::new(move |ctx, args| {
                 *counts
-                    .borrow_mut()
+                    .lock()
+                    .expect("counts mutex poisoned")
                     .entry("file.write".to_string())
                     .or_insert(0) += 1;
                 let path = args
@@ -172,7 +173,10 @@ pub fn register_fixture_tools(
                 retriever_write
                     .index_document(&reference, &ctx.task_id, "artifact", path, content, 1)
                     .map_err(tool_err)?;
-                effects.borrow_mut().push(format!("file.written:{path}"));
+                effects
+                    .lock()
+                    .expect("effects mutex poisoned")
+                    .push(format!("file.written:{path}"));
                 Ok(ToolExecutionResult {
                     preview: format!(
                         "artifact written: {path} ({} chars)",
@@ -194,7 +198,8 @@ pub fn register_fixture_tools(
             "file.read".into(),
             Box::new(move |ctx, args| {
                 *counts
-                    .borrow_mut()
+                    .lock()
+                    .expect("counts mutex poisoned")
                     .entry("file.read".to_string())
                     .or_insert(0) += 1;
                 let path = args.get("path").and_then(|p| p.as_str()).unwrap_or("");
@@ -229,12 +234,16 @@ pub fn register_fixture_tools(
             "mail.send".into(),
             Box::new(move |_ctx, args| {
                 *counts
-                    .borrow_mut()
+                    .lock()
+                    .expect("counts mutex poisoned")
                     .entry("mail.send".to_string())
                     .or_insert(0) += 1;
                 let to = args.get("to").and_then(|t| t.as_str()).unwrap_or("");
                 let body = args.get("body").and_then(|b| b.as_str()).unwrap_or("");
-                effects.borrow_mut().push(format!("mail.sent:{to}"));
+                effects
+                    .lock()
+                    .expect("effects mutex poisoned")
+                    .push(format!("mail.sent:{to}"));
                 Ok(ToolExecutionResult {
                     preview: format!("mail sent to {to} ({} chars)", body.chars().count()),
                     side_effects: vec![format!("mail.sent:{to}")],
@@ -252,7 +261,8 @@ pub fn register_fixture_tools(
             "fail.always".into(),
             Box::new(move |_ctx, _args| {
                 *counts
-                    .borrow_mut()
+                    .lock()
+                    .expect("counts mutex poisoned")
                     .entry("fail.always".to_string())
                     .or_insert(0) += 1;
                 Err(ToolExecError {

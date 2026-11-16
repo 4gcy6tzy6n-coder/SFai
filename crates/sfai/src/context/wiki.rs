@@ -69,7 +69,7 @@ pub struct ResolvedRef {
     pub summary: String,
 }
 
-pub trait RefResolver {
+pub trait RefResolver: Send + Sync {
     fn resolve(&self, ref_id: &str) -> Result<Option<ResolvedRef>>;
 }
 

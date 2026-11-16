@@ -10,7 +10,7 @@ use sfai::authority::approvals::AutoApprove;
 use sfai::contracts::{IntentKind, TaskStatus, Verdict};
 use sfai::core::action_intents::intent;
 use sfai::integrations::providers::fake::{ScriptedModel, Step};
-use std::rc::Rc;
+use std::sync::Arc;
 
 fn execute(op: &str, args: Value, key: &str) -> Step {
     Step::Intent(Box::new(intent(
@@ -239,7 +239,7 @@ fn acceptance_failures_are_visible_and_bounded() {
 #[test]
 fn consequential_actions_require_a_later_verification() {
     let dir = temp_root();
-    let app = build_app_with_approvals(dir.path(), Rc::new(AutoApprove)).expect("app");
+    let app = build_app_with_approvals(dir.path(), Arc::new(AutoApprove)).expect("app");
 
     // Without verification: completion is blocked with a visible issue.
     let task = app

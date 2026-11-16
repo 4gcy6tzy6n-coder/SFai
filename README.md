@@ -30,6 +30,7 @@ issues **SF-001 – SF-014** (milestones M0–M3 core), written in Rust
 | Skills (M5) | `SKILL.md` packages: metadata-only discovery, per-run activation into the working set, version pinning, trust metadata |
 | Telemetry | JSONL traces, token/cost accounting, trace replayer |
 | Interfaces | CLI (`sfai run/resume/status/inspect/context/capabilities/skills/wiki/verify/export-trace`) |
+| API (M7) | local HTTP + SSE service (`sfai serve`): tasks, events, run/cancel, artifacts, trace, wiki, verify |
 
 Not yet (tracked in the debug reports / plan): end-to-end acceptance against a
 real hosted model (offline fakes + mock HTTP only so far), OS-level sandboxing
@@ -48,6 +49,38 @@ cargo run -- export-trace <task_id>
 cargo run -- wiki summary <task_id>             # M4 derived knowledge
 cargo run -- skills list --skills skills         # M5 skill discovery (metadata only)
 ```
+
+## HTTP API (for the UI)
+
+```bash
+cargo run -- serve --port 8765          # binds 127.0.0.1 by default
+SFAI_API_TOKEN=secret cargo run -- serve # optional bearer-token guard
+```
+
+Endpoints (JSON unless noted; when `SFAI_API_TOKEN` is set, every `/api/*`
+route except `/api/health` requires `Authorization: Bearer <token>`):
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/health` | health + fixture list |
+| GET | `/api/capabilities` | capability manifests |
+| GET | `/api/skills` | skill metadata only (no instructions) |
+| GET/POST | `/api/tasks` | list / create `{goal, constraints?, acceptance_rules?, max_tool_calls?}` |
+| GET | `/api/tasks/:id` | task + state |
+| GET | `/api/tasks/:id/events?after=<seq>` | ledger events |
+| GET | `/api/tasks/:id/stream` | SSE stream (`ledger` events + heartbeats) |
+| POST | `/api/tasks/:id/run` | run `{fixture?, max_steps?}` (fixture model or provider) |
+| POST | `/api/tasks/:id/cancel` | cooperative cancellation |
+| GET | `/api/tasks/:id/artifacts` | artifact metadata |
+| GET | `/api/tasks/:id/artifacts/:artifact_id` | artifact text |
+| GET | `/api/tasks/:id/trace` | trace entries |
+| GET | `/api/tasks/:id/wiki` | derived Wiki summary |
+| GET | `/api/tasks/:id/verify` | acceptance verification results |
+| POST | `/api/demo/:fixture` | create + run a demo task |
+
+Duplicate runs of the same task are rejected with `409`; the kernel checks the
+cancel flag each step, so cancelled tasks end in `cancelled` rather than
+silently finishing.
 
 ### Interactive session
 

@@ -155,6 +155,34 @@ pub fn fixture_failed_tool() -> FixtureSpec {
 }
 
 pub fn fixture_approval() -> FixtureSpec {
+    fn after_send(envelope: &ContextEnvelope) -> ActionIntent {
+        let last_status = envelope
+            .recent_results
+            .last()
+            .and_then(|r| r.get("status"))
+            .and_then(|s| s.as_str())
+            .unwrap_or("denied");
+        if last_status == "ok" {
+            intent(
+                IntentKind::Verify,
+                &task_id_of(envelope),
+                "verify_external_action",
+                json!({"criteria": []}),
+                vec![],
+                None,
+            )
+        } else {
+            intent(
+                IntentKind::AskUser,
+                &task_id_of(envelope),
+                "needs_authorization",
+                json!({"question": "May I send this email? The previous attempt was denied."}),
+                vec![],
+                None,
+            )
+        }
+    }
+
     let build = || -> Box<dyn ModelAdapter> {
         let steps = vec![
             Step::Intent(Box::new(intent(
@@ -165,11 +193,12 @@ pub fn fixture_approval() -> FixtureSpec {
                 vec![],
                 Some("mail-1".into()),
             ))),
+            Step::Dyn(Box::new(after_send)),
             Step::Intent(Box::new(intent(
-                IntentKind::AskUser,
+                IntentKind::Finish,
                 "unknown",
-                "needs_authorization",
-                json!({"question": "May I send this email? The previous attempt was denied."}),
+                "done",
+                json!({"text": "Status email sent and verified."}),
                 vec![],
                 None,
             ))),

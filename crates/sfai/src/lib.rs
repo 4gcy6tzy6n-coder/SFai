@@ -62,5 +62,7 @@ pub mod integrations {
 
 pub mod app;
 pub mod fixtures;
+pub mod server;
+pub mod ui;
 
 pub use error::{Result, SfaiError};

@@ -1,25 +1,48 @@
-//! CLI: run, resume, status, inspect, context, capabilities, verify, export-trace.
+//! CLI: Claude Code-style interactive session + subcommands (`run`, `resume`,
+//! `tasks`, `status`, `inspect`, `context`, `capabilities`, `skills`, `wiki`,
+//! `verify`, `export-trace`, `doctor`).
 
 use clap::{Parser, Subcommand};
 use serde_json::json;
 use std::path::PathBuf;
 use std::process::ExitCode;
+use std::sync::Arc;
 
 use sfai::app::{build_app_with_options, App};
 use sfai::contracts::Budget;
 use sfai::fixtures::{get_fixture, FIXTURE_NAMES};
 use sfai::integrations::providers::openai_compat::OpenAICompatibleAdapter;
+use sfai::telemetry::replay::replay_trace;
+use sfai::ui::{
+    detect_model_label, render_box, render_capabilities_table, render_context_read,
+    render_context_search, render_doctor_card, render_fixtures_table, render_help_card,
+    render_inspect_timeline, render_prompt, render_run_summary, render_skill_detail,
+    render_skills_list, render_task_status_card, render_tasks_table, render_trace_card,
+    render_verification_card, render_welcome_banner, render_wiki_view, BannerInfo,
+    ClaudeStepObserver, CliApprovalProvider, PermissionMode, Theme,
+};
 
 #[derive(Parser)]
 #[command(
     name = "sfai",
-    about = "System for future ai CLI (offline fixtures supported)"
+    about = "System for future ai — Claude Code-style CLI & offline-capable agent runtime"
 )]
 struct Cli {
+    /// Storage directory for SQLite ledger, blobs, workspaces, and traces
     #[arg(long, default_value = ".sfai", global = true)]
     storage: PathBuf,
+    /// Optional Skill packages directory (defaults to `<storage>/skills` or `./skills`)
     #[arg(long, global = true)]
     skills: Option<PathBuf>,
+    /// Render rich Claude Code terminal UI for subcommands instead of raw JSON
+    #[arg(long, global = true)]
+    ui: bool,
+    /// Disable ANSI color codes
+    #[arg(long, global = true)]
+    no_color: bool,
+    /// Runtime approval policy for consequential actions: deny | ask | auto
+    #[arg(long, default_value = "deny", global = true)]
+    permissions: String,
     #[command(subcommand)]
     cmd: Option<Cmd>,
 }
@@ -32,6 +55,10 @@ enum Cmd {
         fixture: Option<String>,
         #[arg(long)]
         goal: Option<String>,
+        #[arg(long)]
+        constraint: Vec<String>,
+        #[arg(long)]
+        accept: Vec<String>,
         #[arg(long, default_value_t = 50)]
         max_steps: usize,
     },
@@ -40,6 +67,11 @@ enum Cmd {
         task_id: String,
         #[arg(long)]
         fixture: Option<String>,
+    },
+    /// List recent tasks in storage
+    Tasks {
+        #[arg(long, default_value_t = 20)]
+        limit: usize,
     },
     /// Show task + state
     Status { task_id: String },
@@ -69,6 +101,17 @@ enum Cmd {
     Wiki {
         #[command(subcommand)]
         wiki: WikiCmd,
+    },
+    /// Run system health and configuration diagnostics
+    Doctor,
+    /// Serve the local HTTP API for the UI (tasks, events/SSE, artifacts, wiki)
+    Serve {
+        /// TCP port (default 8765)
+        #[arg(long, default_value_t = 8765)]
+        port: u16,
+        /// Bind address (loopback only by default)
+        #[arg(long, default_value = "127.0.0.1")]
+        bind: String,
     },
 }
 
@@ -116,31 +159,54 @@ fn main() -> ExitCode {
     }
 }
 
+fn resolve_skills_dir(storage: &std::path::Path, explicit: Option<PathBuf>) -> Option<PathBuf> {
+    if explicit.is_some() {
+        return explicit;
+    }
+    let storage_skills = storage.join("skills");
+    if storage_skills.exists() {
+        return Some(storage_skills);
+    }
+    let local_skills = PathBuf::from("skills");
+    if local_skills.exists() {
+        return Some(local_skills);
+    }
+    None
+}
+
 fn dispatch(cli: Cli) -> Result<u8, String> {
-    let app: App = build_app_with_options(
-        &cli.storage,
-        std::rc::Rc::new(sfai::authority::approvals::DenyAllApprovals),
-        cli.skills.clone(),
-    )
-    .map_err(|e| e.to_string())?;
+    let theme = Theme::auto(cli.no_color);
+    let perm_mode = PermissionMode::from_str(&cli.permissions).ok_or_else(|| {
+        format!(
+            "invalid --permissions {:?}; choose from deny, ask, auto",
+            cli.permissions
+        )
+    })?;
+    let approvals = Arc::new(CliApprovalProvider::new(perm_mode, theme));
+    let skills_dir = resolve_skills_dir(&cli.storage, cli.skills.clone());
+    let app: App = build_app_with_options(&cli.storage, approvals.clone(), skills_dir)
+        .map_err(|e| e.to_string())?;
+
     let Some(cmd) = cli.cmd else {
-        return interactive(&app);
+        return interactive(&app, &approvals, theme);
     };
+
     match cmd {
         Cmd::Run {
             fixture,
             goal,
+            constraint,
+            accept,
             max_steps,
         } => {
-            let task = if let Some(name) = fixture {
+            let (task, mut model) = if let Some(name) = fixture {
                 let spec = get_fixture(&name).map_err(|e| e.to_string())?;
+                let mut constraints = spec.constraints.clone();
+                constraints.extend(constraint);
+                let mut rules = spec.acceptance_rules.clone();
+                rules.extend(accept);
                 let task = app
-                    .create_task(
-                        &spec.goal,
-                        spec.constraints.clone(),
-                        spec.acceptance_rules.clone(),
-                        Some(spec.budget.clone()),
-                    )
+                    .create_task(&spec.goal, constraints, rules, Some(spec.budget.clone()))
                     .map_err(|e| e.to_string())?;
                 if let Some(setup) = spec.setup {
                     setup(&app, &task).map_err(|e| e.to_string())?;
@@ -148,7 +214,7 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
                 (task, (spec.build_model)())
             } else if let Some(goal) = goal {
                 let task = app
-                    .create_task(&goal, vec![], vec![], Some(Budget::default()))
+                    .create_task(&goal, constraint, accept, Some(Budget::default()))
                     .map_err(|e| e.to_string())?;
                 (
                     task,
@@ -157,26 +223,37 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
                 )
             } else {
                 return Err(format!(
-                    "provide --fixture <{}|...> or --goal TEXT",
+                    "provide --fixture <{}> or --goal TEXT",
                     FIXTURE_NAMES.join("|")
                 ));
             };
-            let (task, mut model) = task;
-            let result = app
-                .run(model.as_mut(), &task.task_id, max_steps)
-                .map_err(|e| e.to_string())?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "task_id": result.task_id,
-                    "status": result.status.as_str(),
-                    "answer": result.answer,
-                    "steps": result.steps,
-                    "cost": result.cost,
-                    "open_issues": result.open_issues,
-                }))
-                .map_err(|e| e.to_string())?
-            );
+
+            let result = if cli.ui {
+                let mut observer = ClaudeStepObserver::new(std::io::stdout(), theme);
+                let res = app
+                    .run_observed(model.as_mut(), &task.task_id, max_steps, &mut observer)
+                    .map_err(|e| e.to_string())?;
+                print!("{}", render_run_summary(&res, &theme));
+                res
+            } else {
+                let res = app
+                    .run(model.as_mut(), &task.task_id, max_steps)
+                    .map_err(|e| e.to_string())?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "task_id": res.task_id,
+                        "status": res.status.as_str(),
+                        "answer": res.answer,
+                        "steps": res.steps,
+                        "cost": res.cost,
+                        "open_issues": res.open_issues,
+                    }))
+                    .map_err(|e| e.to_string())?
+                );
+                res
+            };
+
             Ok(if result.status == sfai::contracts::TaskStatus::Completed {
                 0
             } else {
@@ -190,83 +267,135 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
                 Some(name) => (get_fixture(&name).map_err(|e| e.to_string())?.build_model)(),
                 None => Box::new(OpenAICompatibleAdapter::from_env()),
             };
-            let result = app
-                .run(model.as_mut(), &task_id, 50)
-                .map_err(|e| e.to_string())?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({
-                    "task_id": result.task_id,
-                    "status": result.status.as_str(),
-                    "steps": result.steps,
-                }))
-                .map_err(|e| e.to_string())?
-            );
+            let result = if cli.ui {
+                let mut observer = ClaudeStepObserver::new(std::io::stdout(), theme);
+                let res = app
+                    .run_observed(model.as_mut(), &task_id, 50, &mut observer)
+                    .map_err(|e| e.to_string())?;
+                print!("{}", render_run_summary(&res, &theme));
+                res
+            } else {
+                let res = app
+                    .run(model.as_mut(), &task_id, 50)
+                    .map_err(|e| e.to_string())?;
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({
+                        "task_id": res.task_id,
+                        "status": res.status.as_str(),
+                        "steps": res.steps,
+                    }))
+                    .map_err(|e| e.to_string())?
+                );
+                res
+            };
             Ok(if result.status == sfai::contracts::TaskStatus::Completed {
                 0
             } else {
                 1
             })
         }
+        Cmd::Tasks { limit } => {
+            let tasks = app.task_store.list(limit).map_err(|e| e.to_string())?;
+            if cli.ui {
+                let mut pairs = Vec::with_capacity(tasks.len());
+                for t in tasks {
+                    let st = app
+                        .task_store
+                        .state(&t.task_id)
+                        .map_err(|e| e.to_string())?;
+                    pairs.push((t, st));
+                }
+                println!("{}", render_tasks_table(&pairs, &theme));
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&tasks).map_err(|e| e.to_string())?
+                );
+            }
+            Ok(0)
+        }
         Cmd::Status { task_id } => {
             let task = app.task_store.load(&task_id).map_err(|e| e.to_string())?;
             let state = app.task_store.state(&task_id).map_err(|e| e.to_string())?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({"task": task, "state": state}))
-                    .map_err(|e| e.to_string())?
-            );
+            if cli.ui {
+                println!("{}", render_task_status_card(&task, &state, &theme));
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({"task": task, "state": state}))
+                        .map_err(|e| e.to_string())?
+                );
+            }
             Ok(0)
         }
         Cmd::Inspect { task_id } => {
+            let task = app.task_store.load(&task_id).map_err(|e| e.to_string())?;
             let state = app.task_store.state(&task_id).map_err(|e| e.to_string())?;
             let events = app
                 .ledger
                 .events_for(&task_id, 0)
                 .map_err(|e| e.to_string())?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&json!({"state": state, "events": events}))
-                    .map_err(|e| e.to_string())?
-            );
+            if cli.ui {
+                println!(
+                    "{}",
+                    render_inspect_timeline(&task, &state, &events, &theme)
+                );
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&json!({"state": state, "events": events}))
+                        .map_err(|e| e.to_string())?
+                );
+            }
             Ok(0)
         }
-        Cmd::Context { ctx } => {
-            match ctx {
-                CtxCmd::Search { query, limit } => {
-                    let hits = app
-                        .retriever
-                        .search(&query, None, None, limit.unwrap_or(5))
-                        .map_err(|e| e.to_string())?;
+        Cmd::Context { ctx } => match ctx {
+            CtxCmd::Search { query, limit } => {
+                let hits = app
+                    .retriever
+                    .search(&query, None, None, limit.unwrap_or(5))
+                    .map_err(|e| e.to_string())?;
+                if cli.ui {
+                    println!("{}", render_context_search(&query, &hits, &theme));
+                } else {
                     println!(
-                    "{}",
-                    serde_json::to_string_pretty(&json!(hits
-                        .iter()
-                        .map(|h| json!({"ref_id": h.ref_id, "title": h.title, "snippet": h.snippet}))
-                        .collect::<Vec<_>>()))
-                    .map_err(|e| e.to_string())?
-                );
-                    Ok(0)
+                        "{}",
+                        serde_json::to_string_pretty(&json!(hits
+                            .iter()
+                            .map(|h| json!({"ref_id": h.ref_id, "title": h.title, "snippet": h.snippet}))
+                            .collect::<Vec<_>>()))
+                        .map_err(|e| e.to_string())?
+                    );
                 }
-                CtxCmd::Read { ref_id, max_tokens } => {
-                    let payload = app
-                        .retriever
-                        .read(&ref_id, None, max_tokens.unwrap_or(600))
-                        .map_err(|e| e.to_string())?;
+                Ok(0)
+            }
+            CtxCmd::Read { ref_id, max_tokens } => {
+                let payload = app
+                    .retriever
+                    .read(&ref_id, None, max_tokens.unwrap_or(600))
+                    .map_err(|e| e.to_string())?;
+                if cli.ui {
+                    println!("{}", render_context_read(&payload, &theme));
+                } else {
                     println!(
                         "{}",
                         serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?
                     );
-                    Ok(0)
                 }
+                Ok(0)
             }
-        }
+        },
         Cmd::Capabilities => {
             let manifests = app.registry.discover("", 50, None);
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&manifests).map_err(|e| e.to_string())?
-            );
+            if cli.ui {
+                println!("{}", render_capabilities_table(&manifests, &theme));
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&manifests).map_err(|e| e.to_string())?
+                );
+            }
             Ok(0)
         }
         Cmd::Verify { task_id, criteria } => {
@@ -283,35 +412,52 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
             let all_pass = results
                 .iter()
                 .all(|r| r.verdict == sfai::contracts::Verdict::Pass);
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&results).map_err(|e| e.to_string())?
-            );
+            if cli.ui {
+                println!("{}", render_verification_card(&task_id, &results, &theme));
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&results).map_err(|e| e.to_string())?
+                );
+            }
             Ok(if all_pass { 0 } else { 1 })
         }
         Cmd::ExportTrace { task_id } => {
             let entries = app.export_trace(&task_id).map_err(|e| e.to_string())?;
-            println!(
-                "{}",
-                serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())?
-            );
+            if cli.ui {
+                let replay = replay_trace(&entries);
+                println!("{}", render_trace_card(&task_id, &entries, &replay, &theme));
+            } else {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&entries).map_err(|e| e.to_string())?
+                );
+            }
             Ok(0)
         }
         Cmd::Skills { skills } => match skills {
             SkillsCmd::List { query } => {
                 let manifests = app.skills.discover(&query, 50);
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&manifests).map_err(|e| e.to_string())?
-                );
+                if cli.ui {
+                    println!("{}", render_skills_list(&manifests, &theme));
+                } else {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&manifests).map_err(|e| e.to_string())?
+                    );
+                }
                 Ok(0)
             }
             SkillsCmd::Show { name } => {
                 let activation = app.skills.activate(&name).map_err(|e| e.to_string())?;
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&activation).map_err(|e| e.to_string())?
-                );
+                if cli.ui {
+                    println!("{}", render_skill_detail(&activation, &theme));
+                } else {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&activation).map_err(|e| e.to_string())?
+                    );
+                }
                 Ok(0)
             }
         },
@@ -326,30 +472,147 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
             }
             WikiCmd::Summary { task_id } => {
                 let summary = app.wiki.summary(&task_id).map_err(|e| e.to_string())?;
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?
-                );
+                if cli.ui {
+                    let nodes = app.wiki.nodes_for(&task_id).map_err(|e| e.to_string())?;
+                    let edges = app.wiki.edges_for(&task_id).map_err(|e| e.to_string())?;
+                    println!(
+                        "{}",
+                        render_wiki_view(&task_id, &summary, &nodes, &edges, &theme)
+                    );
+                } else {
+                    println!(
+                        "{}",
+                        serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?
+                    );
+                }
                 Ok(0)
             }
         },
+        Cmd::Serve { port, bind } => {
+            let addr: std::net::SocketAddr = format!("{bind}:{port}")
+                .parse()
+                .map_err(|e| format!("invalid bind address {bind}:{port}: {e}"))?;
+            let app = Arc::new(app);
+            eprintln!("sfai api listening on http://{addr}");
+            eprintln!("  GET  /api/health | /api/tasks | /api/tasks/:id | /api/tasks/:id/stream");
+            eprintln!("  POST /api/tasks | /api/tasks/:id/run | /api/demo/:fixture | /api/tasks/:id/cancel");
+            tokio::runtime::Builder::new_multi_thread()
+                .enable_all()
+                .build()
+                .map_err(|e| e.to_string())?
+                .block_on(sfai::server::serve(
+                    app,
+                    addr,
+                    std::env::var("SFAI_API_TOKEN").ok(),
+                ))
+                .map_err(|e| e.to_string())?;
+            Ok(0)
+        }
+        Cmd::Doctor => {
+            println!("{}", render_doctor_card(&app, approvals.mode(), &theme));
+            Ok(0)
+        }
     }
 }
 
-// ---- interactive session (bare `sfai`) ----
+// ---- Claude Code-style Interactive REPL Session (bare `sfai`) ----
 
-const HELP: &str = "\nCommands:\n  /run <fixture>   run an offline fixture (direct-answer|tool-use|failed-tool|approval|context-retrieval)\n  /fixtures        list fixtures\n  /goal <text>     run a goal with the configured provider (or just type the goal)\n  /status          last task status\n  /trace <task>    export trace for a task\n  /wiki <task>     derived Wiki summary\n  /skills          list installed skills\n  /help            this help\n  /quit            exit\n";
+#[derive(Default)]
+struct SessionStats {
+    runs: usize,
+    total_steps: usize,
+    total_tool_calls: u64,
+    total_input_tokens: u64,
+    total_output_tokens: u64,
+    total_cost_usd: f64,
+}
 
-fn interactive(app: &App) -> Result<u8, String> {
+impl SessionStats {
+    fn record(&mut self, result: &sfai::core::decision_kernel::TaskRunResult) {
+        self.runs += 1;
+        self.total_steps += result.steps;
+        self.total_tool_calls += result
+            .cost
+            .get("tool_calls")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        self.total_input_tokens += result
+            .cost
+            .get("input_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        self.total_output_tokens += result
+            .cost
+            .get("output_tokens")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0);
+        self.total_cost_usd += result
+            .cost
+            .get("cost_usd")
+            .and_then(|v| v.as_f64())
+            .unwrap_or(0.0);
+    }
+}
+
+fn print_banner(app: &App, approvals: &CliApprovalProvider, theme: &Theme) {
+    let model_label = detect_model_label();
+    let tasks_count = app.task_store.list(1000).map(|t| t.len()).unwrap_or(0);
+    let info = BannerInfo {
+        storage: &app.storage_root.display().to_string(),
+        model_label: &model_label,
+        capabilities_count: app.registry.discover("", 100, None).len(),
+        skills_count: app.skills.discover("", 100).len(),
+        tasks_count,
+        permission_mode: approvals.mode(),
+    };
+    println!("{}\n", render_welcome_banner(&info, theme));
+}
+
+fn resolve_target_task(arg: &str, last_task: Option<&str>, app: &App) -> Result<String, String> {
+    let trimmed = arg.trim();
+    if !trimmed.is_empty() {
+        return Ok(trimmed.to_string());
+    }
+    if let Some(tid) = last_task {
+        return Ok(tid.to_string());
+    }
+    if let Ok(mut recent) = app.task_store.list(1) {
+        if let Some(first) = recent.pop() {
+            return Ok(first.task_id);
+        }
+    }
+    Err("no active task yet; run a goal or `/run <fixture>` first".into())
+}
+
+fn interactive(
+    app: &App,
+    approvals: &Arc<CliApprovalProvider>,
+    theme: Theme,
+) -> Result<u8, String> {
     use std::io::{BufRead, Write};
-    println!("System for future ai — interactive session");
-    println!("Type a goal and press Enter to run it, or /help for commands.");
-    println!("Offline demo: /run tool-use\n");
 
-    let mut last_task: Option<String> = None;
+    print_banner(app, approvals, &theme);
+
+    let mut last_task: Option<String> = app
+        .task_store
+        .list(1)
+        .ok()
+        .and_then(|mut v| v.pop().map(|t| t.task_id));
+    let mut session_constraints: Vec<String> = Vec::new();
+    let mut session_acceptance: Vec<String> = Vec::new();
+    let mut stats = SessionStats::default();
+
     let stdin = std::io::stdin();
     loop {
-        print!("sfai> ");
+        print!(
+            "{}",
+            render_prompt(
+                last_task.as_deref(),
+                approvals.mode(),
+                session_constraints.len(),
+                &theme
+            )
+        );
         std::io::stdout().flush().map_err(|e| e.to_string())?;
         let mut line = String::new();
         let read = stdin
@@ -367,72 +630,372 @@ fn interactive(app: &App) -> Result<u8, String> {
         if matches!(input, "/quit" | "/exit" | "quit" | "exit") {
             break;
         }
-        if input == "/help" {
-            println!("{HELP}");
+        if matches!(input, "/help" | "?") {
+            println!("{}\n", render_help_card(&theme));
+            continue;
+        }
+        if input == "/clear" {
+            if theme.color {
+                print!("\x1b[2J\x1b[H");
+            }
+            print_banner(app, approvals, &theme);
             continue;
         }
         if input == "/fixtures" {
-            println!("fixtures: {}", FIXTURE_NAMES.join(", "));
+            println!("{}\n", render_fixtures_table(&theme));
             continue;
         }
-        if let Some(name) = input.strip_prefix("/run ") {
-            match run_fixture_interactive(app, name.trim()) {
-                Ok(task_id) => last_task = Some(task_id),
-                Err(err) => println!("error: {err}"),
+        if input == "/doctor" {
+            println!("{}\n", render_doctor_card(app, approvals.mode(), &theme));
+            continue;
+        }
+        if input == "/capabilities" {
+            let manifests = app.registry.discover("", 50, None);
+            println!("{}\n", render_capabilities_table(&manifests, &theme));
+            continue;
+        }
+        if input == "/tasks" {
+            match app.task_store.list(20) {
+                Ok(tasks) => {
+                    let mut pairs = Vec::with_capacity(tasks.len());
+                    for t in tasks {
+                        if let Ok(st) = app.task_store.state(&t.task_id) {
+                            pairs.push((t, st));
+                        }
+                    }
+                    println!("{}\n", render_tasks_table(&pairs, &theme));
+                }
+                Err(err) => println!("  {} {}\n", theme.red_bold("✗ error:"), err),
             }
             continue;
         }
-        if input == "/status" {
-            match &last_task {
-                Some(task_id) => match app.task_store.state(task_id) {
-                    Ok(state) => println!(
-                        "  task={task_id}  status={}  outputs={}  issues={}",
-                        state.status.as_str(),
-                        state.completed_outputs.len(),
-                        state.open_issues.len()
-                    ),
-                    Err(err) => println!("error: {err}"),
-                },
-                None => println!("no task yet; run a goal or /run <fixture>"),
-            }
-            continue;
-        }
-        if let Some(task_id) = input.strip_prefix("/trace ") {
-            match app.export_trace(task_id.trim()) {
-                Ok(entries) => println!("  trace entries: {}", entries.len()),
-                Err(err) => println!("error: {err}"),
-            }
-            continue;
-        }
-        if let Some(task_id) = input.strip_prefix("/wiki ") {
-            match app.wiki.summary(task_id.trim()) {
-                Ok(summary) => println!(
-                    "{}",
-                    serde_json::to_string_pretty(&summary).map_err(|e| e.to_string())?
+        if input == "/cost" {
+            let lines = vec![
+                format!("{}  {}", theme.dim("Session Runs   :"), stats.runs),
+                format!("{}  {}", theme.dim("Total Steps    :"), stats.total_steps),
+                format!(
+                    "{}  {}",
+                    theme.dim("Total Tool Runs:"),
+                    stats.total_tool_calls
                 ),
-                Err(err) => println!("error: {err}"),
-            }
-            continue;
-        }
-        if input == "/skills" {
-            let manifests = app.skills.discover("", 50);
+                format!(
+                    "{}  {} in → {} out",
+                    theme.dim("Session Tokens :"),
+                    stats.total_input_tokens,
+                    stats.total_output_tokens
+                ),
+                format!(
+                    "{}  {}",
+                    theme.dim("Session Cost   :"),
+                    theme.green_bold(&format!("${:.6}", stats.total_cost_usd))
+                ),
+            ];
             println!(
-                "{}",
-                serde_json::to_string_pretty(&manifests).map_err(|e| e.to_string())?
+                "{}\n",
+                render_box(
+                    &theme.accent("✻ Session Cost & Usage Meter"),
+                    &lines,
+                    64,
+                    &theme
+                )
             );
             continue;
         }
+        if input == "/permissions" || input.starts_with("/permissions ") {
+            let arg = input.strip_prefix("/permissions").unwrap_or("").trim();
+            if arg.is_empty() {
+                println!(
+                    "  {} current mode = {} (use `/permissions deny|ask|auto` to switch)\n",
+                    theme.accent("✻"),
+                    approvals.mode().badge(&theme)
+                );
+            } else if let Some(new_mode) = PermissionMode::from_str(arg) {
+                approvals.set_mode(new_mode);
+                println!(
+                    "  {} switched permission mode to {}\n",
+                    theme.green_bold("✓"),
+                    new_mode.badge(&theme)
+                );
+            } else {
+                println!(
+                    "  {} invalid permission mode {:?}; choose deny, ask, or auto\n",
+                    theme.red_bold("✗"),
+                    arg
+                );
+            }
+            continue;
+        }
+        if input == "/constraints" || input.starts_with("/constraints ") {
+            let arg = input.strip_prefix("/constraints").unwrap_or("").trim();
+            if arg.is_empty() || arg == "list" {
+                if session_constraints.is_empty() {
+                    println!(
+                        "  {} no session constraints pinned (use `/constraints add <text>`)\n",
+                        theme.dim("◌")
+                    );
+                } else {
+                    for (i, c) in session_constraints.iter().enumerate() {
+                        println!("  {}. {}", i + 1, theme.magenta(c));
+                    }
+                    println!();
+                }
+            } else if arg == "clear" {
+                session_constraints.clear();
+                println!("  {} cleared session constraints\n", theme.green("✓"));
+            } else if let Some(text) = arg.strip_prefix("add ") {
+                if !text.trim().is_empty() {
+                    session_constraints.push(text.trim().to_string());
+                    println!(
+                        "  {} pinned constraint: {}\n",
+                        theme.green("✓"),
+                        theme.magenta(text.trim())
+                    );
+                }
+            } else {
+                println!("  usage: /constraints [add <text> | clear | list]\n");
+            }
+            continue;
+        }
+        if input == "/accept" || input.starts_with("/accept ") {
+            let arg = input.strip_prefix("/accept").unwrap_or("").trim();
+            if arg.is_empty() || arg == "list" {
+                if session_acceptance.is_empty() {
+                    println!(
+                        "  {} no session acceptance rules set (use `/accept add <rule>`)\n",
+                        theme.dim("◌")
+                    );
+                } else {
+                    for (i, r) in session_acceptance.iter().enumerate() {
+                        println!("  {}. {}", i + 1, theme.yellow(r));
+                    }
+                    println!();
+                }
+            } else if arg == "clear" {
+                session_acceptance.clear();
+                println!("  {} cleared session acceptance rules\n", theme.green("✓"));
+            } else if let Some(rule) = arg.strip_prefix("add ") {
+                if !rule.trim().is_empty() {
+                    session_acceptance.push(rule.trim().to_string());
+                    println!(
+                        "  {} added acceptance rule: {}\n",
+                        theme.green("✓"),
+                        theme.yellow(rule.trim())
+                    );
+                }
+            } else {
+                println!("  usage: /accept [add <rule> | clear | list]\n");
+            }
+            continue;
+        }
+        if input == "/run" || input.starts_with("/run ") {
+            let name = input.strip_prefix("/run").unwrap_or("").trim();
+            if name.is_empty() {
+                println!("  usage: /run <{}>\n", FIXTURE_NAMES.join("|"));
+                continue;
+            }
+            match run_fixture_interactive(app, name, &mut stats, &theme) {
+                Ok(task_id) => last_task = Some(task_id),
+                Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
+            }
+            continue;
+        }
+        if let Some(rest) = input.strip_prefix("/resume") {
+            let parts: Vec<&str> = rest.split_whitespace().collect();
+            let target = match resolve_target_task(
+                parts.first().copied().unwrap_or(""),
+                last_task.as_deref(),
+                app,
+            ) {
+                Ok(t) => t,
+                Err(e) => {
+                    println!("  {} {e}\n", theme.red_bold("✗ error:"));
+                    continue;
+                }
+            };
+            let fixture = parts.get(1).copied();
+            match resume_interactive(app, &target, fixture, &mut stats, &theme) {
+                Ok(task_id) => last_task = Some(task_id),
+                Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
+            }
+            continue;
+        }
+        if input == "/status" || input.starts_with("/status ") {
+            let arg = input.strip_prefix("/status").unwrap_or("");
+            match resolve_target_task(arg, last_task.as_deref(), app) {
+                Ok(task_id) => match (
+                    app.task_store.load(&task_id),
+                    app.task_store.state(&task_id),
+                ) {
+                    (Ok(task), Ok(state)) => {
+                        println!("{}\n", render_task_status_card(&task, &state, &theme));
+                    }
+                    (Err(e), _) | (_, Err(e)) => println!("  {} {e}\n", theme.red_bold("✗ error:")),
+                },
+                Err(e) => println!("  {e}\n"),
+            }
+            continue;
+        }
+        if input == "/inspect" || input.starts_with("/inspect ") {
+            let arg = input.strip_prefix("/inspect").unwrap_or("");
+            match resolve_target_task(arg, last_task.as_deref(), app) {
+                Ok(task_id) => match (
+                    app.task_store.load(&task_id),
+                    app.task_store.state(&task_id),
+                    app.ledger.events_for(&task_id, 0),
+                ) {
+                    (Ok(task), Ok(state), Ok(events)) => {
+                        println!(
+                            "{}\n",
+                            render_inspect_timeline(&task, &state, &events, &theme)
+                        );
+                    }
+                    _ => println!("  {} unknown task {task_id}\n", theme.red_bold("✗ error:")),
+                },
+                Err(e) => println!("  {e}\n"),
+            }
+            continue;
+        }
+        if let Some(q) = input
+            .strip_prefix("/search ")
+            .or_else(|| input.strip_prefix("/context search "))
+        {
+            match app.retriever.search(q.trim(), None, None, 5) {
+                Ok(hits) => println!("{}\n", render_context_search(q.trim(), &hits, &theme)),
+                Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
+            }
+            continue;
+        }
+        if let Some(r) = input
+            .strip_prefix("/read ")
+            .or_else(|| input.strip_prefix("/context read "))
+        {
+            match app.retriever.read(r.trim(), None, 600) {
+                Ok(payload) => println!("{}\n", render_context_read(&payload, &theme)),
+                Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
+            }
+            continue;
+        }
+        if input == "/trace" || input.starts_with("/trace ") {
+            let arg = input.strip_prefix("/trace").unwrap_or("");
+            match resolve_target_task(arg, last_task.as_deref(), app) {
+                Ok(task_id) => match app.export_trace(&task_id) {
+                    Ok(entries) => {
+                        let replay = replay_trace(&entries);
+                        println!(
+                            "{}\n",
+                            render_trace_card(&task_id, &entries, &replay, &theme)
+                        );
+                    }
+                    Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
+                },
+                Err(e) => println!("  {e}\n"),
+            }
+            continue;
+        }
+        if input == "/wiki" || input.starts_with("/wiki ") {
+            let arg = input.strip_prefix("/wiki").unwrap_or("").trim();
+            let (compile_first, target_arg) = if let Some(rest) = arg.strip_prefix("compile") {
+                (true, rest.trim())
+            } else {
+                (false, arg)
+            };
+            match resolve_target_task(target_arg, last_task.as_deref(), app) {
+                Ok(task_id) => {
+                    if compile_first {
+                        let _ = app.wiki.compile_task(&task_id);
+                    }
+                    match (
+                        app.wiki.summary(&task_id),
+                        app.wiki.nodes_for(&task_id),
+                        app.wiki.edges_for(&task_id),
+                    ) {
+                        (Ok(summary), Ok(nodes), Ok(edges)) => {
+                            println!(
+                                "{}\n",
+                                render_wiki_view(&task_id, &summary, &nodes, &edges, &theme)
+                            );
+                        }
+                        _ => println!(
+                            "  {} failed to read Wiki for {task_id}\n",
+                            theme.red_bold("✗ error:")
+                        ),
+                    }
+                }
+                Err(e) => println!("  {e}\n"),
+            }
+            continue;
+        }
+        if input == "/skills" || input.starts_with("/skills ") {
+            let arg = input.strip_prefix("/skills").unwrap_or("").trim();
+            if arg.is_empty() {
+                let manifests = app.skills.discover("", 50);
+                println!("{}\n", render_skills_list(&manifests, &theme));
+            } else {
+                match app.skills.activate(arg) {
+                    Ok(act) => println!("{}\n", render_skill_detail(&act, &theme)),
+                    Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
+                }
+            }
+            continue;
+        }
+        if input == "/verify" || input.starts_with("/verify ") {
+            let arg = input.strip_prefix("/verify").unwrap_or("").trim();
+            let parts: Vec<&str> = arg.split_whitespace().collect();
+            let target = match resolve_target_task(
+                parts.first().copied().unwrap_or(""),
+                last_task.as_deref(),
+                app,
+            ) {
+                Ok(t) => t,
+                Err(e) => {
+                    println!("  {e}\n");
+                    continue;
+                }
+            };
+            let explicit_criteria: Vec<String> =
+                parts.into_iter().skip(1).map(|s| s.to_string()).collect();
+            match app.task_store.load(&target) {
+                Ok(task) => {
+                    let criteria = if explicit_criteria.is_empty() {
+                        task.acceptance_rules
+                    } else {
+                        explicit_criteria
+                    };
+                    match app.verifier.verify(&target, &criteria) {
+                        Ok(results) => {
+                            println!("{}\n", render_verification_card(&target, &results, &theme))
+                        }
+                        Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
+                    }
+                }
+                Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
+            }
+            continue;
+        }
+
         let goal = input.strip_prefix("/goal ").unwrap_or(input).to_string();
-        match run_goal_interactive(app, &goal) {
+        match run_goal_interactive(
+            app,
+            &goal,
+            &session_constraints,
+            &session_acceptance,
+            &mut stats,
+            &theme,
+        ) {
             Ok(task_id) => last_task = Some(task_id),
-            Err(err) => println!("error: {err}"),
+            Err(err) => println!("  {} {err}\n", theme.red_bold("✗ error:")),
         }
     }
     println!("bye.");
     Ok(0)
 }
 
-fn run_fixture_interactive(app: &App, name: &str) -> Result<String, String> {
+fn run_fixture_interactive(
+    app: &App,
+    name: &str,
+    stats: &mut SessionStats,
+    theme: &Theme,
+) -> Result<String, String> {
     let spec = get_fixture(name).map_err(|e| e.to_string())?;
     let task = app
         .create_task(
@@ -446,45 +1009,69 @@ fn run_fixture_interactive(app: &App, name: &str) -> Result<String, String> {
         setup(app, &task).map_err(|e| e.to_string())?;
     }
     let mut model = (spec.build_model)();
+    let mut observer = ClaudeStepObserver::new(std::io::stdout(), *theme);
     let result = app
-        .run(model.as_mut(), &task.task_id, 50)
+        .run_observed(model.as_mut(), &task.task_id, 50, &mut observer)
         .map_err(|e| e.to_string())?;
-    print_summary(&result);
+    stats.record(&result);
+    print!("{}", render_run_summary(&result, theme));
     Ok(task.task_id)
 }
 
-fn run_goal_interactive(app: &App, goal: &str) -> Result<String, String> {
+fn resume_interactive(
+    app: &App,
+    task_id: &str,
+    fixture: Option<&str>,
+    stats: &mut SessionStats,
+    theme: &Theme,
+) -> Result<String, String> {
+    let state = app.resume_state(task_id).map_err(|e| e.to_string())?;
+    println!(
+        "  {} resumed {} at seq {} (status={})",
+        theme.cyan("↺"),
+        task_id,
+        state.last_seq,
+        state.status.as_str()
+    );
+    let mut model: Box<dyn sfai::core::model_adapter::ModelAdapter> = match fixture {
+        Some(name) => (get_fixture(name).map_err(|e| e.to_string())?.build_model)(),
+        None => Box::new(OpenAICompatibleAdapter::from_env()),
+    };
+    let mut observer = ClaudeStepObserver::new(std::io::stdout(), *theme);
+    let result = app
+        .run_observed(model.as_mut(), task_id, 50, &mut observer)
+        .map_err(|e| e.to_string())?;
+    stats.record(&result);
+    print!("{}", render_run_summary(&result, theme));
+    Ok(result.task_id)
+}
+
+fn run_goal_interactive(
+    app: &App,
+    goal: &str,
+    constraints: &[String],
+    acceptance_rules: &[String],
+    stats: &mut SessionStats,
+    theme: &Theme,
+) -> Result<String, String> {
     let task = app
-        .create_task(goal, vec![], vec![], Some(Budget::default()))
+        .create_task(
+            goal,
+            constraints.to_vec(),
+            acceptance_rules.to_vec(),
+            Some(Budget::default()),
+        )
         .map_err(|e| e.to_string())?;
     let mut model = OpenAICompatibleAdapter::from_env();
-    match app.run(&mut model, &task.task_id, 50) {
+    let mut observer = ClaudeStepObserver::new(std::io::stdout(), *theme);
+    match app.run_observed(&mut model, &task.task_id, 50, &mut observer) {
         Ok(result) => {
-            print_summary(&result);
+            stats.record(&result);
+            print!("{}", render_run_summary(&result, theme));
             Ok(result.task_id)
         }
         Err(err) => Err(format!(
-            "{err}\n(hint: configure SFAI_MODEL_BASE_URL / SFAI_MODEL_API_KEY / SFAI_MODEL_NAME, or use /run <fixture> offline)"
+            "{err}\n  (hint: configure SFAI_MODEL_BASE_URL / SFAI_MODEL_API_KEY / SFAI_MODEL_NAME, or use `/run <fixture>` offline)"
         )),
     }
-}
-
-fn print_summary(result: &sfai::core::decision_kernel::TaskRunResult) {
-    let cost_usd = result
-        .cost
-        .get("cost_usd")
-        .and_then(|c| c.as_f64())
-        .unwrap_or(0.0);
-    let tool_calls = result
-        .cost
-        .get("tool_calls")
-        .and_then(|c| c.as_u64())
-        .unwrap_or(0);
-    println!(
-        "  task={}  status={}  steps={}  tool_calls={}  cost=${cost_usd:.6}",
-        result.task_id,
-        result.status.as_str(),
-        result.steps,
-        tool_calls
-    );
 }

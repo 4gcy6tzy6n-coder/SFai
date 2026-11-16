@@ -56,6 +56,18 @@ impl TaskStore {
         Ok(serde_json::from_str(&row_str(&row, "json"))?)
     }
 
+    pub fn list(&self, limit: usize) -> Result<Vec<Task>> {
+        let rows = self.db.query(
+            "SELECT json FROM tasks ORDER BY updated_at DESC, rowid DESC LIMIT ?1",
+            params![limit as i64],
+        )?;
+        let mut out = Vec::with_capacity(rows.len());
+        for row in rows {
+            out.push(serde_json::from_str(&row_str(&row, "json"))?);
+        }
+        Ok(out)
+    }
+
     pub fn save(&self, task: &Task) -> Result<()> {
         self.db.execute(
             "UPDATE tasks SET json = ?1, version = ?2, updated_at = ?3 WHERE task_id = ?4",

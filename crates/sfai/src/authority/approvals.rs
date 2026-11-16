@@ -6,8 +6,8 @@
 use crate::contracts::RiskClass;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::cell::RefCell;
 use std::collections::VecDeque;
+use std::sync::Mutex;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -18,7 +18,7 @@ pub struct ApprovalDecision {
     pub receipt: Option<Value>,
 }
 
-pub trait ApprovalProvider {
+pub trait ApprovalProvider: Send + Sync {
     fn request(
         &self,
         task_id: &str,
@@ -62,15 +62,15 @@ impl ApprovalProvider for AutoApprove {
 }
 
 pub struct ScriptedApprovals {
-    decisions: RefCell<VecDeque<bool>>,
-    pub requested: RefCell<Vec<String>>,
+    decisions: Mutex<VecDeque<bool>>,
+    pub requested: Mutex<Vec<String>>,
 }
 
 impl ScriptedApprovals {
     pub fn new(decisions: Vec<bool>) -> Self {
         Self {
-            decisions: RefCell::new(decisions.into()),
-            requested: RefCell::new(Vec::new()),
+            decisions: Mutex::new(decisions.into()),
+            requested: Mutex::new(Vec::new()),
         }
     }
 }
@@ -82,8 +82,16 @@ impl ApprovalProvider for ScriptedApprovals {
         action_summary: &str,
         risk_class: RiskClass,
     ) -> ApprovalDecision {
-        self.requested.borrow_mut().push(action_summary.to_string());
-        let approved = self.decisions.borrow_mut().pop_front().unwrap_or(false);
+        self.requested
+            .lock()
+            .expect("approvals mutex poisoned")
+            .push(action_summary.to_string());
+        let approved = self
+            .decisions
+            .lock()
+            .expect("approvals mutex poisoned")
+            .pop_front()
+            .unwrap_or(false);
         ApprovalDecision {
             approved,
             decided_by: "policy:scripted".into(),

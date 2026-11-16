@@ -60,7 +60,8 @@ fn duplicate_idempotency_key_commits_once() {
     assert_eq!(result.status, TaskStatus::Completed);
     assert_eq!(
         app.tool_counts
-            .borrow()
+            .lock()
+            .unwrap()
             .get("file.write")
             .copied()
             .unwrap_or(0),
@@ -112,7 +113,8 @@ fn crash_mid_run_resumes_without_duplicates() {
     assert_eq!(result.status, TaskStatus::Completed);
     assert_eq!(
         app.tool_counts
-            .borrow()
+            .lock()
+            .unwrap()
             .get("file.write")
             .copied()
             .unwrap_or(0),

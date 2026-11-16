@@ -9,7 +9,7 @@ use crate::context::retrieval::ContextRetriever;
 use crate::context::wiki::{StoreResolver, WikiCompiler};
 use crate::contracts::{Budget, Task, TaskState, TaskStatus};
 use crate::core::context_envelope::EnvelopeBuilder;
-use crate::core::decision_kernel::{DecisionKernel, TaskRunResult};
+use crate::core::decision_kernel::{DecisionKernel, KernelObserver, NoopObserver, TaskRunResult};
 use crate::core::model_adapter::ModelAdapter;
 use crate::core::termination::AcceptanceEvaluator;
 use crate::error::Result;
@@ -24,7 +24,7 @@ use crate::telemetry::tracing::{export_trace, Tracer};
 use crate::verify::engine::VerificationEngine;
 use serde_json::{json, Value};
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 pub struct App {
     pub storage_root: PathBuf,
@@ -33,10 +33,10 @@ pub struct App {
     pub objects: ObjectStore,
     pub index: ContextIndex,
     pub retriever: ContextRetriever,
-    pub registry: Rc<CapabilityRegistry>,
+    pub registry: Arc<CapabilityRegistry>,
     pub skills: SkillRegistry,
     pub policy: PolicyEngine,
-    pub approvals: Rc<dyn ApprovalProvider>,
+    pub approvals: Arc<dyn ApprovalProvider>,
     pub broker: ToolBroker,
     pub envelope_builder: EnvelopeBuilder,
     pub verifier: VerificationEngine,
@@ -44,17 +44,17 @@ pub struct App {
     pub task_store: TaskStore,
     pub wiki: WikiCompiler,
     pub trace_dir: PathBuf,
-    pub side_effect_log: Rc<std::cell::RefCell<Vec<String>>>,
-    pub tool_counts: Rc<std::cell::RefCell<std::collections::BTreeMap<String, u32>>>,
+    pub side_effect_log: Arc<Mutex<Vec<String>>>,
+    pub tool_counts: Arc<Mutex<std::collections::BTreeMap<String, u32>>>,
 }
 
 pub fn build_app(storage_root: impl AsRef<Path>) -> Result<App> {
-    build_app_with_approvals(storage_root, Rc::new(DenyAllApprovals))
+    build_app_with_approvals(storage_root, Arc::new(DenyAllApprovals))
 }
 
 pub fn build_app_with_approvals(
     storage_root: impl AsRef<Path>,
-    approvals: Rc<dyn ApprovalProvider>,
+    approvals: Arc<dyn ApprovalProvider>,
 ) -> Result<App> {
     build_app_with_options(storage_root, approvals, None)
 }
@@ -62,7 +62,7 @@ pub fn build_app_with_approvals(
 /// Build with an explicit Skill package directory (defaults to `<storage>/skills`).
 pub fn build_app_with_options(
     storage_root: impl AsRef<Path>,
-    approvals: Rc<dyn ApprovalProvider>,
+    approvals: Arc<dyn ApprovalProvider>,
     skills_dir: Option<PathBuf>,
 ) -> Result<App> {
     let storage_root = storage_root.as_ref().to_path_buf();
@@ -79,7 +79,7 @@ pub fn build_app_with_options(
         side_effect_log,
         tool_counts,
     } = register_fixture_tools(&mut registry, &retriever);
-    let registry = Rc::new(registry);
+    let registry = Arc::new(registry);
     let policy = PolicyEngine;
     let broker = ToolBroker::new(
         registry.clone(),
@@ -156,6 +156,28 @@ impl App {
         task_id: &str,
         max_steps: usize,
     ) -> Result<TaskRunResult> {
+        let mut noop = NoopObserver;
+        self.run_observed(model, task_id, max_steps, &mut noop)
+    }
+
+    pub fn run_observed(
+        &self,
+        model: &mut dyn ModelAdapter,
+        task_id: &str,
+        max_steps: usize,
+        observer: &mut dyn KernelObserver,
+    ) -> Result<TaskRunResult> {
+        self.run_observed_with_cancel(model, task_id, max_steps, observer, None)
+    }
+
+    pub fn run_observed_with_cancel(
+        &self,
+        model: &mut dyn ModelAdapter,
+        task_id: &str,
+        max_steps: usize,
+        observer: &mut dyn KernelObserver,
+        cancel: Option<std::sync::Arc<std::sync::atomic::AtomicBool>>,
+    ) -> Result<TaskRunResult> {
         let tracer = Tracer::new(&self.trace_dir)?;
         let mut kernel = DecisionKernel::new(
             model,
@@ -170,7 +192,10 @@ impl App {
             &self.skills,
             &tracer,
         );
-        let result = kernel.run_task(task_id, max_steps)?;
+        if let Some(flag) = cancel {
+            kernel = kernel.with_cancel_flag(flag);
+        }
+        let result = kernel.run_task_observed(task_id, max_steps, observer)?;
         // M4: incremental Wiki compilation is best-effort and never affects
         // task authority (it writes only to wiki tables).
         let _ = self.wiki.compile_task(task_id);

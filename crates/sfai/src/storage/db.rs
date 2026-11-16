@@ -9,10 +9,9 @@ use crate::error::Result;
 use rusqlite::types::ValueRef;
 use rusqlite::Connection;
 use serde_json::{Number, Value};
-use std::cell::RefCell;
 use std::collections::BTreeMap;
 use std::path::Path;
-use std::rc::Rc;
+use std::sync::{Arc, Mutex};
 
 pub const SCHEMA_VERSION: i64 = 2;
 
@@ -153,14 +152,14 @@ pub type RowMap = BTreeMap<String, Value>;
 
 #[derive(Clone)]
 pub struct Database {
-    conn: Rc<RefCell<Connection>>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 impl Database {
     pub fn open(path: impl AsRef<Path>) -> Result<Self> {
         let conn = Connection::open(path.as_ref())?;
         let db = Self {
-            conn: Rc::new(RefCell::new(conn)),
+            conn: Arc::new(Mutex::new(conn)),
         };
         db.migrate()?;
         Ok(db)
@@ -169,14 +168,14 @@ impl Database {
     pub fn open_in_memory() -> Result<Self> {
         let conn = Connection::open_in_memory()?;
         let db = Self {
-            conn: Rc::new(RefCell::new(conn)),
+            conn: Arc::new(Mutex::new(conn)),
         };
         db.migrate()?;
         Ok(db)
     }
 
     fn migrate(&self) -> Result<()> {
-        let conn = self.conn.borrow();
+        let conn = self.conn.lock().expect("db mutex poisoned");
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         conn.execute_batch(SCHEMA)?;
@@ -188,18 +187,18 @@ impl Database {
     }
 
     pub fn execute<P: rusqlite::Params>(&self, sql: &str, params: P) -> Result<usize> {
-        let conn = self.conn.borrow();
+        let conn = self.conn.lock().expect("db mutex poisoned");
         Ok(conn.execute(sql, params)?)
     }
 
     pub fn execute_batch(&self, sql: &str) -> Result<()> {
-        let conn = self.conn.borrow();
+        let conn = self.conn.lock().expect("db mutex poisoned");
         conn.execute_batch(sql)?;
         Ok(())
     }
 
     pub fn query<P: rusqlite::Params>(&self, sql: &str, params: P) -> Result<Vec<RowMap>> {
-        let conn = self.conn.borrow();
+        let conn = self.conn.lock().expect("db mutex poisoned");
         let mut stmt = conn.prepare(sql)?;
         let columns: Vec<String> = stmt.column_names().iter().map(|c| c.to_string()).collect();
         let mut rows = stmt.query(params)?;
@@ -219,13 +218,17 @@ impl Database {
     }
 
     pub fn last_insert_rowid(&self) -> i64 {
-        self.conn.borrow().last_insert_rowid()
+        self.conn
+            .lock()
+            .expect("db mutex poisoned")
+            .last_insert_rowid()
     }
 
     /// Helper for a single-statement insert with params, returning the row id.
     pub fn insert<P: rusqlite::Params>(&self, sql: &str, params: P) -> Result<i64> {
-        self.execute(sql, params)?;
-        Ok(self.last_insert_rowid())
+        let conn = self.conn.lock().expect("db mutex poisoned");
+        conn.execute(sql, params)?;
+        Ok(conn.last_insert_rowid())
     }
 }
 

@@ -8,8 +8,8 @@ use crate::contracts::{CapabilityManifest, CapabilityOperation, TaskState};
 use crate::error::{Result, SfaiError};
 use crate::storage::objects::ObjectStore;
 use serde_json::Value;
-use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
+use std::sync::Mutex;
 
 #[derive(Debug, Clone, Default)]
 pub struct ToolExecutionResult {
@@ -37,8 +37,11 @@ pub struct RunContext {
     pub workspace_root: std::path::PathBuf,
 }
 
-pub type Handler =
-    Box<dyn Fn(&mut RunContext, &Value) -> std::result::Result<ToolExecutionResult, ToolExecError>>;
+pub type Handler = Box<
+    dyn Fn(&mut RunContext, &Value) -> std::result::Result<ToolExecutionResult, ToolExecError>
+        + Send
+        + Sync,
+>;
 
 pub struct RegisteredCapability {
     pub manifest: CapabilityManifest,
@@ -49,7 +52,7 @@ pub struct RegisteredCapability {
 pub struct CapabilityRegistry {
     caps: BTreeMap<String, RegisteredCapability>,
     op_index: HashMap<String, (String, CapabilityOperation)>,
-    pub activations: RefCell<Vec<String>>,
+    pub activations: Mutex<Vec<String>>,
 }
 
 impl CapabilityRegistry {
@@ -122,7 +125,8 @@ impl CapabilityRegistry {
             .get(capability_id)
             .ok_or_else(|| SfaiError::NotFound(format!("unknown capability: {capability_id}")))?;
         self.activations
-            .borrow_mut()
+            .lock()
+            .expect("registry mutex poisoned")
             .push(capability_id.to_string());
         Ok(cap.manifest.operations.clone())
     }

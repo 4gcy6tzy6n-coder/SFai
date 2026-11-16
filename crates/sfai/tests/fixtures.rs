@@ -7,7 +7,7 @@ use common::{create_and_setup, run_fixture, temp_root, tool_run_rows};
 use sfai::app::{build_app, build_app_with_approvals};
 use sfai::authority::approvals::ScriptedApprovals;
 use sfai::contracts::{TaskStatus, Verdict};
-use std::rc::Rc;
+use std::sync::Arc;
 
 #[test]
 fn direct_answer_makes_no_tool_calls() {
@@ -19,11 +19,11 @@ fn direct_answer_makes_no_tool_calls() {
     assert_eq!(result.answer.as_deref(), Some("4"));
     assert_eq!(result.steps, 1);
     assert!(
-        app.broker.invocations.borrow().is_empty(),
+        app.broker.invocations.lock().unwrap().is_empty(),
         "direct answer must not invoke tools"
     );
     assert!(
-        app.registry.activations.borrow().is_empty(),
+        app.registry.activations.lock().unwrap().is_empty(),
         "direct answer must not activate capabilities"
     );
     assert_eq!(result.cost["tool_calls"].as_u64().unwrap_or(0), 0);
@@ -67,7 +67,8 @@ fn tool_use_produces_verifiable_artifact() {
 
     assert_eq!(
         app.tool_counts
-            .borrow()
+            .lock()
+            .unwrap()
             .get("file.write")
             .copied()
             .unwrap_or(0),
@@ -75,7 +76,8 @@ fn tool_use_produces_verifiable_artifact() {
     );
     assert!(
         app.tool_counts
-            .borrow()
+            .lock()
+            .unwrap()
             .get("web.search")
             .copied()
             .unwrap_or(0)
@@ -83,7 +85,8 @@ fn tool_use_produces_verifiable_artifact() {
     );
     assert!(app
         .side_effect_log
-        .borrow()
+        .lock()
+        .unwrap()
         .iter()
         .any(|s| s == "file.written:report.md"));
     assert!(!app.export_trace(&task.task_id).expect("trace").is_empty());
@@ -98,7 +101,8 @@ fn failed_tool_blocks_after_bounded_retry() {
     assert_eq!(result.status, TaskStatus::Blocked);
     assert_eq!(
         app.tool_counts
-            .borrow()
+            .lock()
+            .unwrap()
             .get("fail.always")
             .copied()
             .unwrap_or(0),
@@ -119,19 +123,20 @@ fn failed_tool_blocks_after_bounded_retry() {
 #[test]
 fn approval_denial_has_no_side_effect() {
     let dir = temp_root();
-    let approvals = Rc::new(ScriptedApprovals::new(vec![false]));
+    let approvals = Arc::new(ScriptedApprovals::new(vec![false]));
     let app = build_app_with_approvals(dir.path(), approvals.clone()).expect("app");
     let (task, result) = run_fixture(&app, "approval");
 
     assert_eq!(result.status, TaskStatus::WaitingApproval);
-    assert_eq!(approvals.requested.borrow().len(), 1);
+    assert_eq!(approvals.requested.lock().unwrap().len(), 1);
     assert!(
-        app.side_effect_log.borrow().is_empty(),
+        app.side_effect_log.lock().unwrap().is_empty(),
         "denied action must leave no side effect"
     );
     assert_eq!(
         app.tool_counts
-            .borrow()
+            .lock()
+            .unwrap()
             .get("mail.send")
             .copied()
             .unwrap_or(0),

@@ -47,7 +47,7 @@ fn unknown_operation_is_denied_not_executed() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0]["status"], "denied");
     assert_eq!(rows[0]["error_code"], "UNKNOWN_OPERATION");
-    assert!(app.side_effect_log.borrow().is_empty());
+    assert!(app.side_effect_log.lock().unwrap().is_empty());
 }
 
 #[test]
@@ -68,10 +68,11 @@ fn external_write_denied_without_approval() {
     let result = app.run(&mut model, &task.task_id, 10).expect("run");
 
     assert_eq!(result.status, TaskStatus::Completed);
-    assert!(app.side_effect_log.borrow().is_empty());
+    assert!(app.side_effect_log.lock().unwrap().is_empty());
     assert_eq!(
         app.tool_counts
-            .borrow()
+            .lock()
+            .unwrap()
             .get("mail.send")
             .copied()
             .unwrap_or(0),
@@ -123,7 +124,7 @@ fn injected_source_text_cannot_grant_permission() {
     app.run(&mut model, &task.task_id, 10).expect("run");
 
     assert!(
-        app.side_effect_log.borrow().is_empty(),
+        app.side_effect_log.lock().unwrap().is_empty(),
         "injected text must not cause an external side effect"
     );
     let rows = tool_run_rows(&app, &task.task_id, "mail.send");
