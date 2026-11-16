@@ -58,6 +58,7 @@ pub mod integrations {
     pub mod filesystem;
     pub mod providers {
         pub mod fake;
+        pub mod forced_pipeline;
         pub mod openai_compat;
         pub mod profiles;
     }

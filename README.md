@@ -4,6 +4,11 @@ A general-purpose, **model-native agent platform**: the main model chooses its
 next action, capability, Skill, and information access — no mandatory
 Planner → Executor → Reviewer workflow, no external LLM router.
 
+**Core: `Decide-Act`** — the model-native self-routing loop at the heart of the
+harness: the model *decides* one action per step, the runtime *acts* it safely
+(policy broker, idempotency, receipts, verification). Everything else —
+index-native context, the verification gate, the benchmark — orbits this loop.
+
 **Dual deliverables (non-negotiable):**
 1. a usable agent **application** (CLI + UI + local API), and
 2. a **top-tier research paper** supported by completed experiments
@@ -25,7 +30,7 @@ issues **SF-001 – SF-014** (milestones M0–M3 core), written in Rust
 | Area | What works today |
 |---|---|
 | Contracts | Typed serde entities (Task/TaskState/Event/SourceRef/ActionIntent/ToolResult/CapabilityManifest), strict unknown-field rejection |
-| Kernel | Self-routing decision loop with **direct-answer mode** (zero discovery calls) |
+| Kernel | **Decide-Act** self-routing loop (model decides, runtime acts) with **direct-answer mode** (zero discovery calls) |
 | Broker | Policy risk tiers, approval-gated external writes, idempotent execution, audited denials, receipts |
 | Storage | SQLite (WAL) event ledger, checkpoint/resume, content-addressed blob store |
 | Context | Root/sub-index, FTS5 search, bounded `context.read`, working-set compiler with retrieval receipt |

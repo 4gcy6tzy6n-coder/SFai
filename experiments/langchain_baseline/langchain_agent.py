@@ -82,7 +82,15 @@ def run_task(llm, goal: str, rules: list[str], spec_id: str) -> dict:
         try:
             data = json.loads((WORKSPACE / "answer.json").read_text())
             values = data.values() if isinstance(data, dict) else [data]
-            correct = any(str(v).strip() == str(rules[1]) for v in values)
+            exp_f = float(rules[1])
+            correct = False
+            for v in values:
+                try:
+                    if abs(float(v) - exp_f) < 1e-9:
+                        correct = True
+                        break
+                except (TypeError, ValueError):
+                    continue
         except Exception:  # noqa: BLE001
             correct = False
     else:

@@ -22,12 +22,13 @@ use std::time::Instant;
 pub const BENCH_VERSION: &str = "0.2.1";
 pub const DEFAULT_SIZE: usize = 6;
 pub const SUITES: [&str; 4] = ["tool-use", "dataset", "long-horizon", "edge-case"];
-pub const ABLATIONS: [&str; 5] = [
+pub const ABLATIONS: [&str; 6] = [
     "none",
     "full_context",
     "no_pinned",
     "no_verification",
     "no_wiki",
+    "forced_pipeline",
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -626,6 +627,7 @@ pub fn run_benchmark_full(
                         "no_pinned" => app.envelope_builder.pin_constraints = false,
                         "no_verification" => app.enforce_acceptance = false,
                         "no_wiki" => app.wiki_compile_enabled = false,
+                        "forced_pipeline" => {} // routing lives in the model wrapper
                         _ => {}
                     }
                     let task = match app.create_task(
@@ -639,6 +641,15 @@ pub fn run_benchmark_full(
                     };
                     seed_task(&app, spec, &task.task_id);
                     let mut model = build_model(suite, spec, provider);
+                    if ablation == "forced_pipeline" {
+                        model = Box::new(
+                            crate::integrations::providers::forced_pipeline::ForcedPipelineModel::new(
+                                model,
+                                suite,
+                                spec.acceptance_rules.clone(),
+                            ),
+                        );
+                    }
                     let mut observer = crate::core::decision_kernel::NoopObserver;
                     let started = Instant::now();
                     let result = app.run_observed(model.as_mut(), &task.task_id, 50, &mut observer);

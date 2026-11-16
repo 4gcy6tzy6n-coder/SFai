@@ -7,6 +7,15 @@ application, (2) a top-tier research paper backed by completed experiments.
 Neither is optional, and the experiment track is a first-class workstream, not
 an afterthought.
 
+## 0. Core mechanism: Decide-Act
+
+The harness's core is named **Decide-Act**: a model-native self-routing loop
+where the model *decides* the next action intent and the runtime *acts* it
+under policy, with loop guards and routing telemetry. The three pillars of the
+system story are **Decide-Act** (routing), **sparse context activation**
+(index-native bounded context), and the **verification gate** (runtime-enforced
+acceptance that eliminates false success).
+
 ## 1. Two tracks, one codebase
 
 | Track | Deliverable | Current state | Next gate |

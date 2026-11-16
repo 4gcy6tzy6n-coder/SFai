@@ -1,0 +1,13 @@
+{
+  "name": "e8-routing-ablation-deepseek",
+  "provider": "deepseek",
+  "model": "deepseek-chat",
+  "price_in": 0.27,
+  "price_out": 1.10,
+  "suites": ["dataset", "tool-use", "long-horizon"],
+  "ablations": ["none", "forced_pipeline"],
+  "size": 2,
+  "repetitions": 2,
+  "seed": 11,
+  "note": "E8: model self-routing vs forced fixed pipeline (same model calls, routing overridden)"
+}

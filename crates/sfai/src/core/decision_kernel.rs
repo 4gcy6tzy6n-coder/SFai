@@ -1,4 +1,10 @@
-//! Self-routing decision kernel (plan §4).
+//! **Decide-Act** — the self-routing core of sfai (plan §4).
+//!
+//! *Decide-Act* is the project's core loop and name: each **decide** step, the
+//! main model chooses exactly one action intent (answer / discover / retrieve /
+//! activate / execute / verify / ask / pause / finish); each **act** step, the
+//! runtime validates the request and executes it through policy, broker and
+//! stores. The loop is model-native self-routing — not a fixed pipeline.
 //!
 //! Design rule: the main model is the policy for choosing *which action to
 //! request*; the runtime is the authority for deciding whether and how it runs.
@@ -115,6 +121,9 @@ impl TaskRunResult {
         }
     }
 }
+
+/// Canonical alias: the Decide-Act kernel.
+pub type DecideActKernel<'a> = DecisionKernel<'a>;
 
 pub struct DecisionKernel<'a> {
     pub model: &'a mut dyn ModelAdapter,

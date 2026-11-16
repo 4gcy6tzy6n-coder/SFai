@@ -1,0 +1,13 @@
+{
+  "name": "e2m-auto",
+  "provider": "bailian",
+  "model": "auto",
+  "price_in": 0.0,
+  "price_out": 0.0,
+  "suites": ["tool-use", "dataset", "long-horizon", "edge-case"],
+  "ablations": ["none", "no_verification"],
+  "size": 2,
+  "repetitions": 1,
+  "seed": 7,
+  "note": "E2-multi full-bailian sweep (subscription quota — compare tokens)"
+}

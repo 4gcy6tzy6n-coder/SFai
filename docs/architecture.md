@@ -1,5 +1,10 @@
 # Architecture (v0.1, Rust baseline)
 
+> **Core loop name: Decide-Act.** One *decide* = the model emits exactly one
+> action intent; one *act* = the runtime validates and executes it (policy →
+> broker → stores → verification). The kernel in `core/decision_kernel.rs`
+> (`DecideActKernel`) *is* this loop; all planes serve it.
+
 This document maps the plan's architecture (§1 topology, §3 contracts) onto the
 concrete Rust implementation. Deviations are recorded in `docs/decisions/`.
 

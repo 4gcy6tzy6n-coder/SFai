@@ -248,7 +248,7 @@ async fn providers_endpoint_lists_builtin_profiles() {
         .iter()
         .map(|p| p["name"].as_str().unwrap_or(""))
         .collect();
-    assert_eq!(names, vec!["deepseek", "qwen", "mimo", "custom"]);
+    assert_eq!(names, vec!["deepseek", "qwen", "mimo", "bailian", "custom"]);
     assert!(body["default"].is_null());
     assert_eq!(body["providers"][0]["model"], "deepseek-chat");
     assert_eq!(body["providers"][0]["api_key_envs"][0], "DEEPSEEK_API_KEY");

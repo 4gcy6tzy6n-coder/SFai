@@ -15,6 +15,9 @@ pub const DEFAULT_DEEPSEEK_BASE: &str = "https://api.deepseek.com/v1";
 pub const DEFAULT_DEEPSEEK_MODEL: &str = "deepseek-chat";
 pub const DEFAULT_QWEN_BASE: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 pub const DEFAULT_QWEN_MODEL: &str = "qwen-plus";
+/// Alibaba Bailian / MaaS Token Plan (multi-model; cn-beijing cluster).
+pub const DEFAULT_BAILIAN_BASE: &str =
+    "https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1";
 /// Token Plan (CN) cluster for personal/team keys (tp-/ttp-). Override with
 /// XIAOMI_MIMO_BASE_URL for other clusters (token-plan-sgp / token-plan-ams).
 pub const DEFAULT_MIMO_BASE: &str = "https://token-plan-cn.xiaomimimo.com/v1";
@@ -126,6 +129,21 @@ pub fn builtin_profiles() -> Vec<ProviderProfile> {
             note: "Xiaomi MiMo Token Plan (tp-/ttp- keys; subscription quota, so per-token USD cost is not meaningful — compare tokens). Also try mimo-v2.6-flash.".into(),
         },
         ProviderProfile {
+            name: "bailian".into(),
+            base_url: env_non_empty("BAILIAN_BASE_URL")
+                .unwrap_or_else(|| DEFAULT_BAILIAN_BASE.into()),
+            model: env_non_empty("BAILIAN_MODEL")
+                .unwrap_or_else(|| "qwen3.8-flash".into()),
+            api_key_envs: vec![
+                "BAILIAN_API_KEY".into(),
+                "DASHSCOPE_API_KEY".into(),
+                "SFAI_MODEL_API_KEY".into(),
+            ],
+            price_input_per_million: 0.0,
+            price_output_per_million: 0.0,
+            note: "Bailian/MaaS Token Plan (multi-model: qwen4-max, qwen3.8-*, glm-5.*, deepseek-v4-*); subscription quota — compare tokens".into(),
+        },
+        ProviderProfile {
             name: "custom".into(),
             base_url: env_non_empty("SFAI_MODEL_BASE_URL").unwrap_or_default(),
             model: env_non_empty("SFAI_MODEL_NAME").unwrap_or_default(),
@@ -143,7 +161,7 @@ pub fn resolve_provider(name: &str) -> Result<ProviderProfile> {
         .find(|p| p.name == name)
         .ok_or_else(|| {
             SfaiError::Validation(format!(
-                "unknown provider {name:?}; choose from deepseek, qwen, mimo, custom"
+                "unknown provider {name:?}; choose from deepseek, qwen, mimo, bailian, custom"
             ))
         })
 }
@@ -191,7 +209,7 @@ mod tests {
     #[test]
     fn builtin_profiles_are_listed() {
         let names: Vec<String> = builtin_profiles().into_iter().map(|p| p.name).collect();
-        assert_eq!(names, vec!["deepseek", "qwen", "mimo", "custom"]);
+        assert_eq!(names, vec!["deepseek", "qwen", "mimo", "bailian", "custom"]);
     }
 
     #[test]

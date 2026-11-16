@@ -768,7 +768,11 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
         } => {
             let counts: Vec<usize> = workers
                 .split(',')
-                .map(|w| w.trim().parse().map_err(|e| format!("bad worker count {w}: {e}")))
+                .map(|w| {
+                    w.trim()
+                        .parse()
+                        .map_err(|e| format!("bad worker count {w}: {e}"))
+                })
                 .collect::<Result<_, _>>()
                 .map_err(|e: String| e)?;
             println!("| workers | tasks | wall ms | tasks/sec | ms/task |");
