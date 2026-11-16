@@ -1,0 +1,23 @@
+[package]
+name = "sfai"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "System for future ai — model-native, self-routing agent platform with index-native context (Rust)"
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+rusqlite.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+clap.workspace = true
+thiserror.workspace = true
+sha2.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[[bin]]
+name = "sfai"
+path = "src/bin/sfai.rs"

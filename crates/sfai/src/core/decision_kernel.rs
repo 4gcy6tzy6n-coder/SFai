@@ -1,0 +1,675 @@
+//! Self-routing decision kernel (plan §4).
+//!
+//! Design rule: the main model is the policy for choosing *which action to
+//! request*; the runtime is the authority for deciding whether and how it runs.
+//!
+//! The loop is deliberately not a Planner → Executor → Reviewer workflow. The
+//! model may answer directly with zero discovery calls, discover capabilities,
+//! read context by address, execute through the broker, verify, ask the user,
+//! pause, or finish — in any useful order.
+
+use crate::authority::tasks::TaskStore;
+use crate::capabilities::registry::CapabilityRegistry;
+use crate::context::retrieval::ContextRetriever;
+use crate::contracts::{ActionIntent, ContextEnvelope, IntentKind, ModelResponse, Task};
+use crate::core::context_envelope::EnvelopeBuilder;
+use crate::core::model_adapter::ModelAdapter;
+use crate::core::termination::AcceptanceEvaluator;
+use crate::error::{Result, SfaiError};
+use crate::ids::new_decision_id;
+use crate::runtime::broker::ToolBroker;
+use crate::storage::event_ledger::EventLedger;
+use crate::telemetry::cost::CostLedger;
+use crate::telemetry::tracing::Tracer;
+use crate::verify::engine::VerificationEngine;
+use rusqlite::params;
+use serde_json::{json, Value};
+
+pub const MAX_STEPS: usize = 50;
+pub const MAX_CONSECUTIVE_TOOL_ERRORS: u32 = 3;
+pub const MAX_ACCEPTANCE_RETRIES: u32 = 2;
+
+#[derive(Debug, Clone)]
+pub struct TaskRunResult {
+    pub task_id: String,
+    pub status: crate::contracts::TaskStatus,
+    pub answer: Option<String>,
+    pub steps: usize,
+    pub cost: Value,
+    pub open_issues: Vec<Value>,
+}
+
+impl TaskRunResult {
+    pub fn completed(task_id: &str, answer: Option<String>) -> Self {
+        Self {
+            task_id: task_id.to_string(),
+            status: crate::contracts::TaskStatus::Completed,
+            answer,
+            steps: 0,
+            cost: Value::Null,
+            open_issues: Vec::new(),
+        }
+    }
+
+    pub fn blocked(task_id: &str) -> Self {
+        Self {
+            task_id: task_id.to_string(),
+            status: crate::contracts::TaskStatus::Blocked,
+            answer: None,
+            steps: 0,
+            cost: Value::Null,
+            open_issues: Vec::new(),
+        }
+    }
+}
+
+pub struct DecisionKernel<'a> {
+    pub model: &'a mut dyn ModelAdapter,
+    pub broker: &'a ToolBroker,
+    pub task_store: &'a TaskStore,
+    pub ledger: &'a EventLedger,
+    pub envelope_builder: &'a EnvelopeBuilder,
+    pub acceptance: &'a AcceptanceEvaluator,
+    pub verifier: &'a VerificationEngine,
+    pub retriever: &'a ContextRetriever,
+    pub registry: &'a CapabilityRegistry,
+    pub tracer: &'a Tracer,
+    cost: CostLedger,
+}
+
+impl<'a> DecisionKernel<'a> {
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        model: &'a mut dyn ModelAdapter,
+        broker: &'a ToolBroker,
+        task_store: &'a TaskStore,
+        ledger: &'a EventLedger,
+        envelope_builder: &'a EnvelopeBuilder,
+        acceptance: &'a AcceptanceEvaluator,
+        verifier: &'a VerificationEngine,
+        retriever: &'a ContextRetriever,
+        registry: &'a CapabilityRegistry,
+        tracer: &'a Tracer,
+    ) -> Self {
+        Self {
+            model,
+            broker,
+            task_store,
+            ledger,
+            envelope_builder,
+            acceptance,
+            verifier,
+            retriever,
+            registry,
+            tracer,
+            cost: CostLedger::new(),
+        }
+    }
+
+    pub fn run_task(&mut self, task_id: &str, max_steps: usize) -> Result<TaskRunResult> {
+        let mut task = self.task_store.load(task_id)?;
+        if task.status.is_terminal() {
+            return Ok(self.finish_result(task_id, task.status.as_str()));
+        }
+        if task.status != crate::contracts::TaskStatus::Active {
+            self.task_store.set_status(
+                task_id,
+                crate::contracts::TaskStatus::Active,
+                "run started",
+            )?;
+        }
+        task.status = crate::contracts::TaskStatus::Active;
+
+        let mut steps = 0usize;
+        let mut consecutive_tool_errors = 0u32;
+        let mut acceptance_retries = 0u32;
+
+        while steps < max_steps {
+            steps += 1;
+            let state = self.task_store.state(task_id)?;
+            let envelope = self.envelope_builder.build(&task, &state)?;
+            let response = match self.decide(task_id, &envelope) {
+                Ok(r) => r,
+                Err(exc) => {
+                    let _ = self.tracer.record(
+                        task_id,
+                        "model_error",
+                        json!({"error": exc.to_string()}),
+                    );
+                    return Err(exc);
+                }
+            };
+            let mut intent = response.intent.clone();
+            // Runtime authority: the model cannot target another task.
+            intent.task_id = task_id.to_string();
+            self.task_store.record_decision_started(
+                task_id,
+                intent.kind.as_str(),
+                &intent.reason_code,
+            )?;
+            self.tracer.record(
+                task_id,
+                "decision",
+                json!({
+                    "step": steps,
+                    "kind": intent.kind.as_str(),
+                    "reason_code": intent.reason_code,
+                    "model_id": response.model_id,
+                    "usage": response.usage,
+                }),
+            )?;
+
+            match intent.kind {
+                IntentKind::Respond | IntentKind::Finish => {
+                    let (done, result) = self.try_complete(task_id, &task, &intent)?;
+                    if done {
+                        let mut result = result.unwrap();
+                        result.steps = steps;
+                        result.cost = self.cost_value();
+                        return Ok(result);
+                    }
+                    acceptance_retries += 1;
+                    consecutive_tool_errors = 0;
+                    if acceptance_retries > MAX_ACCEPTANCE_RETRIES {
+                        self.task_store.set_status(
+                            task_id,
+                            crate::contracts::TaskStatus::Blocked,
+                            "acceptance criteria still failing",
+                        )?;
+                        let mut result = TaskRunResult::blocked(task_id);
+                        result.answer = intent
+                            .payload
+                            .get("text")
+                            .and_then(|t| t.as_str())
+                            .map(|s| s.to_string());
+                        result.open_issues = self.task_store.state(task_id)?.open_issues;
+                        result.steps = steps;
+                        result.cost = self.cost_value();
+                        self.tracer
+                            .record(task_id, "final", json!({"status": "blocked"}))?;
+                        return Ok(result);
+                    }
+                    continue;
+                }
+                IntentKind::Pause => {
+                    self.task_store.set_status(
+                        task_id,
+                        crate::contracts::TaskStatus::Paused,
+                        &intent.reason_code,
+                    )?;
+                    let mut result = self.finish_result(task_id, "paused");
+                    result.steps = steps;
+                    result.cost = self.cost_value();
+                    return Ok(result);
+                }
+                IntentKind::AskUser => {
+                    self.task_store.apply(
+                        task_id,
+                        &[json!({
+                            "type": "issue_recorded",
+                            "issue": {
+                                "key": format!("ask_user:{steps}"),
+                                "question": intent.payload.get("question").and_then(|q| q.as_str()).unwrap_or(""),
+                            },
+                        })],
+                    )?;
+                    self.task_store.set_status(
+                        task_id,
+                        crate::contracts::TaskStatus::WaitingApproval,
+                        &intent.reason_code,
+                    )?;
+                    let mut result = self.finish_result(task_id, "waiting_approval");
+                    result.open_issues = self.task_store.state(task_id)?.open_issues;
+                    result.steps = steps;
+                    result.cost = self.cost_value();
+                    return Ok(result);
+                }
+                _ => {
+                    let tool_result = self.dispatch(task_id, &intent, &state)?;
+                    self.apply_result(task_id, &intent, &tool_result)?;
+                    if tool_result.status == crate::contracts::ToolStatus::Error {
+                        consecutive_tool_errors += 1;
+                        if consecutive_tool_errors >= MAX_CONSECUTIVE_TOOL_ERRORS {
+                            // Bounded retry: visible blocked state, never silent success.
+                            self.task_store.set_status(
+                                task_id,
+                                crate::contracts::TaskStatus::Blocked,
+                                "tool errors exceeded bounded retry",
+                            )?;
+                            let mut result = TaskRunResult::blocked(task_id);
+                            result.open_issues = self.task_store.state(task_id)?.unresolved_errors;
+                            result.steps = steps;
+                            result.cost = self.cost_value();
+                            self.tracer.record(
+                                task_id,
+                                "final",
+                                json!({"status": "blocked", "reason": "tool errors exceeded bounded retry"}),
+                            )?;
+                            return Ok(result);
+                        }
+                    } else {
+                        consecutive_tool_errors = 0;
+                    }
+                    if let Err(reason) = self.check_budgets(task_id, &task) {
+                        self.task_store.set_status(
+                            task_id,
+                            crate::contracts::TaskStatus::Blocked,
+                            &reason,
+                        )?;
+                        let mut result = TaskRunResult::blocked(task_id);
+                        result.steps = steps;
+                        result.cost = self.cost_value();
+                        self.tracer.record(
+                            task_id,
+                            "final",
+                            json!({"status": "blocked", "reason": reason}),
+                        )?;
+                        return Ok(result);
+                    }
+                }
+            }
+        }
+
+        self.task_store.set_status(
+            task_id,
+            crate::contracts::TaskStatus::Blocked,
+            "max steps exceeded",
+        )?;
+        let mut result = TaskRunResult::blocked(task_id);
+        result.steps = steps;
+        result.cost = self.cost_value();
+        Ok(result)
+    }
+
+    // ---- internals ----
+
+    fn cost_value(&mut self) -> Value {
+        self.cost.report().as_value()
+    }
+
+    fn finish_result(&self, task_id: &str, status: &str) -> TaskRunResult {
+        TaskRunResult {
+            task_id: task_id.to_string(),
+            status: crate::contracts::TaskStatus::from_str(status)
+                .unwrap_or(crate::contracts::TaskStatus::Blocked),
+            answer: None,
+            steps: 0,
+            cost: Value::Null,
+            open_issues: Vec::new(),
+        }
+    }
+
+    fn decide(&mut self, task_id: &str, envelope: &ContextEnvelope) -> Result<ModelResponse> {
+        let response = match self.model.decide(envelope) {
+            Ok(r) => r,
+            Err(e) => return Err(SfaiError::Model(e.to_string())),
+        };
+        self.ledger.db.execute(
+            "INSERT INTO decisions(decision_id, task_id, model_id, input_context_hash,
+             intent_json, usage_json, latency_ms, created_at)
+             VALUES(?1,?2,?3,?4,?5,?6,?7,datetime('now'))",
+            params![
+                new_decision_id(),
+                task_id,
+                response.model_id,
+                EnvelopeBuilder::envelope_hash(envelope),
+                serde_json::to_string(&response.intent)?,
+                serde_json::to_string(&response.usage)?,
+                response.latency_ms,
+            ],
+        )?;
+        self.cost.add_model_usage(&response.usage);
+        Ok(response)
+    }
+
+    fn dispatch(
+        &self,
+        task_id: &str,
+        intent: &ActionIntent,
+        state: &crate::contracts::TaskState,
+    ) -> Result<crate::contracts::ToolResult> {
+        use crate::contracts::ToolResult;
+        if intent.kind == IntentKind::Execute {
+            return self.broker.execute(intent, state);
+        }
+        if intent.kind == IntentKind::Discover {
+            let query = intent
+                .payload
+                .get("query")
+                .and_then(|q| q.as_str())
+                .unwrap_or("");
+            let limit = intent
+                .payload
+                .get("limit")
+                .and_then(|l| l.as_u64())
+                .unwrap_or(5) as usize;
+            let filters = intent.payload.get("filters");
+            let found = self.registry.discover(query, limit, filters);
+            return Ok(ToolResult {
+                operation_id: Some("capabilities.discover".into()),
+                status: crate::contracts::ToolStatus::Ok,
+                result_preview: format!("{} capability(ies)", found.len()),
+                result_data: json!({"capabilities": found}),
+                ..Default::default()
+            });
+        }
+        if intent.kind == IntentKind::Activate {
+            let cid = intent
+                .payload
+                .get("capability_id")
+                .and_then(|c| c.as_str())
+                .unwrap_or("");
+            return match self.registry.activate(cid) {
+                Ok(ops) => Ok(ToolResult {
+                    operation_id: Some("capabilities.activate".into()),
+                    status: crate::contracts::ToolStatus::Ok,
+                    result_preview: format!("activated {cid}: {} operation(s)", ops.len()),
+                    result_data: json!({"operations": ops}),
+                    ..Default::default()
+                }),
+                Err(exc) => Ok(ToolResult {
+                    operation_id: Some("capabilities.activate".into()),
+                    status: crate::contracts::ToolStatus::Error,
+                    error_code: Some("UNKNOWN_CAPABILITY".into()),
+                    diagnostic: Some(json!({
+                        "verdict": "fail",
+                        "error_code": "UNKNOWN_CAPABILITY",
+                        "repair_hint": exc.to_string(),
+                    })),
+                    ..Default::default()
+                }),
+            };
+        }
+        if intent.kind == IntentKind::Retrieve {
+            return self.dispatch_retrieve(task_id, intent);
+        }
+        if intent.kind == IntentKind::Verify {
+            let criteria: Vec<String> = intent
+                .payload
+                .get("criteria")
+                .and_then(|c| c.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let results = self.verifier.verify(task_id, &criteria)?;
+            let failed = results
+                .iter()
+                .filter(|r| r.verdict == crate::contracts::Verdict::Fail)
+                .count();
+            let diag = results
+                .iter()
+                .find(|r| r.verdict == crate::contracts::Verdict::Fail)
+                .and_then(|r| r.diagnostics.first())
+                .map(|d| json!(d));
+            return Ok(ToolResult {
+                operation_id: Some("verify.run".into()),
+                status: if failed == 0 {
+                    crate::contracts::ToolStatus::Ok
+                } else {
+                    crate::contracts::ToolStatus::Error
+                },
+                result_preview: format!("{} check(s), {} failure(s)", results.len(), failed),
+                result_data: json!({"results": results}),
+                error_code: if failed > 0 {
+                    Some("VERIFICATION_FAILED".into())
+                } else {
+                    None
+                },
+                diagnostic: diag,
+                ..Default::default()
+            });
+        }
+        Ok(ToolResult {
+            status: crate::contracts::ToolStatus::Error,
+            error_code: Some("UNHANDLED_INTENT_KIND".into()),
+            diagnostic: Some(json!({
+                "verdict": "fail",
+                "error_code": "UNHANDLED_INTENT_KIND",
+                "repair_hint": format!("no dispatcher for kind {}", intent.kind.as_str()),
+            })),
+            ..Default::default()
+        })
+    }
+
+    fn dispatch_retrieve(
+        &self,
+        task_id: &str,
+        intent: &ActionIntent,
+    ) -> Result<crate::contracts::ToolResult> {
+        use crate::contracts::{ToolResult, ToolStatus};
+        let op = intent
+            .payload
+            .get("op")
+            .and_then(|o| o.as_str())
+            .unwrap_or("search");
+        if op == "search" {
+            let query = intent
+                .payload
+                .get("query")
+                .and_then(|q| q.as_str())
+                .unwrap_or("");
+            let limit = intent
+                .payload
+                .get("limit")
+                .and_then(|l| l.as_u64())
+                .unwrap_or(5) as usize;
+            let scope_task =
+                if intent.payload.get("task_scope").and_then(|s| s.as_str()) == Some("all") {
+                    None
+                } else {
+                    Some(task_id)
+                };
+            let candidates = self.retriever.search(query, scope_task, None, limit)?;
+            return Ok(ToolResult {
+                operation_id: Some("context.search".into()),
+                status: ToolStatus::Ok,
+                result_preview: format!("{} candidate(s) for {:?}", candidates.len(), query),
+                result_refs: candidates.iter().map(|c| c.ref_id.clone()).collect(),
+                result_data: json!({"candidates": candidates.iter().map(|c| c.ref_id.clone()).collect::<Vec<_>>() }),
+                ..Default::default()
+            });
+        }
+        if op == "read" {
+            let ref_id = intent
+                .payload
+                .get("ref_id")
+                .and_then(|r| r.as_str())
+                .unwrap_or("");
+            let max_tokens = intent
+                .payload
+                .get("max_tokens")
+                .and_then(|t| t.as_u64())
+                .unwrap_or(600) as usize;
+            return match self.retriever.read(ref_id, None, max_tokens) {
+                Ok(payload) => Ok(ToolResult {
+                    operation_id: Some("context.read".into()),
+                    status: ToolStatus::Ok,
+                    result_preview: payload.excerpt.chars().take(400).collect(),
+                    result_refs: vec![ref_id.to_string()],
+                    result_data: json!(payload),
+                    ..Default::default()
+                }),
+                Err(exc) => Ok(ToolResult {
+                    operation_id: Some("context.read".into()),
+                    status: ToolStatus::Error,
+                    error_code: Some("UNRESOLVABLE_REF".into()),
+                    diagnostic: Some(json!({
+                        "verdict": "fail",
+                        "error_code": "UNRESOLVABLE_REF",
+                        "repair_hint": exc.to_string(),
+                    })),
+                    ..Default::default()
+                }),
+            };
+        }
+        if op == "resolve" {
+            let ref_ids: Vec<String> = intent
+                .payload
+                .get("ref_ids")
+                .and_then(|r| r.as_array())
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                        .collect()
+                })
+                .unwrap_or_default();
+            let resolved = self.retriever.resolve(&ref_ids)?;
+            return Ok(ToolResult {
+                operation_id: Some("context.resolve".into()),
+                status: ToolStatus::Ok,
+                result_preview: format!("{} ref(s) resolved", resolved.len()),
+                result_refs: ref_ids,
+                result_data: json!({"resolved": resolved}),
+                ..Default::default()
+            });
+        }
+        Ok(ToolResult {
+            operation_id: Some("context.*".into()),
+            status: ToolStatus::Error,
+            error_code: Some("UNKNOWN_CONTEXT_OP".into()),
+            diagnostic: Some(json!({
+                "verdict": "fail",
+                "error_code": "UNKNOWN_CONTEXT_OP",
+                "repair_hint": format!("unknown context op {op:?}"),
+            })),
+            ..Default::default()
+        })
+    }
+
+    fn apply_result(
+        &mut self,
+        task_id: &str,
+        intent: &ActionIntent,
+        result: &crate::contracts::ToolResult,
+    ) -> Result<()> {
+        self.tracer.record(
+            task_id,
+            "tool_result",
+            json!({
+                "kind": intent.kind.as_str(),
+                "status": result.status.as_str(),
+                "operation_id": result.operation_id,
+                "result_refs": result.result_refs,
+                "side_effects": result.side_effects,
+                "replayed": result.replayed,
+                "error_code": result.error_code,
+            }),
+        )?;
+        if !result.replayed {
+            self.cost.add_tool_call();
+        }
+        // Meta operations bypass the broker, but their results must reach the
+        // ledger so later envelopes can show previews and budgets stay exact.
+        if intent.kind != crate::contracts::IntentKind::Execute && !result.replayed {
+            self.task_store.apply(
+                task_id,
+                &[json!({
+                    "type": "tool_committed",
+                    "operation_id": result.operation_id,
+                    "status": result.status.as_str(),
+                    "result_preview": result.result_preview.chars().take(2000).collect::<String>(),
+                    "result_refs": result.result_refs,
+                    "side_effects": result.side_effects,
+                    "idempotency_key": intent.idempotency_key,
+                })],
+            )?;
+        }
+        if !result.state_events.is_empty() {
+            self.task_store.apply(task_id, &result.state_events)?;
+        }
+        let error_key = format!(
+            "tool:{}",
+            result
+                .operation_id
+                .as_deref()
+                .unwrap_or(intent.kind.as_str())
+        );
+        if result.status == crate::contracts::ToolStatus::Error && result.diagnostic.is_some() {
+            self.task_store.apply(
+                task_id,
+                &[json!({
+                    "type": "error_opened",
+                    "error": {
+                        "key": error_key,
+                        "error_code": result.error_code.clone().unwrap_or_else(|| "TOOL_ERROR".into()),
+                        "diagnostic": result.diagnostic,
+                    },
+                })],
+            )?;
+        } else if result.status == crate::contracts::ToolStatus::Ok {
+            self.task_store.apply(
+                task_id,
+                &[json!({"type": "error_resolved", "key": error_key})],
+            )?;
+        }
+        Ok(())
+    }
+
+    fn try_complete(
+        &self,
+        task_id: &str,
+        task: &Task,
+        intent: &ActionIntent,
+    ) -> Result<(bool, Option<TaskRunResult>)> {
+        let state = self.task_store.state(task_id)?;
+        let assessment = self.acceptance.evaluate_if_required(task, &state)?;
+        let answer = intent
+            .payload
+            .get("text")
+            .and_then(|t| t.as_str())
+            .map(|s| s.to_string());
+        if assessment.blocks_completion {
+            for issue in &assessment.open_issues {
+                self.task_store.apply(
+                    task_id,
+                    &[json!({"type": "issue_recorded", "issue": issue})],
+                )?;
+            }
+            self.tracer.record(
+                task_id,
+                "acceptance_blocked",
+                json!({"issues": assessment.open_issues}),
+            )?;
+            return Ok((false, None));
+        }
+        self.task_store
+            .checkpoint(task_id, "acceptance passed", Some(&state.completed_outputs))?;
+        let reason = if task.acceptance_rules.is_empty() {
+            "finished"
+        } else {
+            "acceptance verified"
+        };
+        self.task_store
+            .set_status(task_id, crate::contracts::TaskStatus::Completed, reason)?;
+        self.tracer.record(
+            task_id,
+            "final",
+            json!({"status": "completed", "answer": answer}),
+        )?;
+        Ok((true, Some(TaskRunResult::completed(task_id, answer))))
+    }
+
+    fn check_budgets(&self, task_id: &str, task: &Task) -> std::result::Result<(), String> {
+        let state = self.task_store.state(task_id).map_err(|e| e.to_string())?;
+        if let Some(max) = task.budget.max_tool_calls {
+            if state.tool_calls_made > max {
+                return Err("tool call budget exceeded".into());
+            }
+        }
+        let report = self.cost.report_snapshot();
+        if let Some(max) = task.budget.max_cost_usd {
+            if report.cost_usd > max {
+                return Err("cost budget exceeded".into());
+            }
+        }
+        if let Some(max) = task.budget.max_model_calls {
+            if report.model_calls > max {
+                return Err("model call budget exceeded".into());
+            }
+        }
+        Ok(())
+    }
+}
