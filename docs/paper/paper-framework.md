@@ -22,9 +22,11 @@
 > **runtime verification gate**). We further introduce a benchmark that
 > measures what framework dashboards omit: **false success** — completed runs
 > whose deliverables are wrong. Across **18 models** (DeepSeek, Qwen, GLM,
-> MiMo families) and **four agent frameworks**, the verification gate reduces
-> false success from up to 1.00 to **0.00** (Wilson 95% CI [0.00, 0.19],
-> n=16/cell), with zero false kills on good deliverables; sparse context
+> MiMo families) and **four agent frameworks**, the verification gate holds
+> false success at **0.00** (72/72 cells; Wilson 95% CI [0.00, 0.19], n=16/cell)
+> where unverified runs average **0.324**, with zero false kills on good
+> deliverables; the Decide-Act loop completes retrieval-heavy tasks a fixed
+> pipeline cannot (1.00 vs 0.00); sparse context
 > activation matches full-history quality at **1/78 of the input tokens** on
 > 160-document histories; and the Rust kernel scales **5.1×** under 16-way
 > CPU concurrency where Python threads flatten at 1.0× (GIL). The runtime,
@@ -36,10 +38,10 @@
 
 | # | Claim | 证据 | 数据文件 | 强度 |
 |---|---|---|---|---|
-| C1 | **Decide-Act**（模型自路由）可行且被真实使用 | ask_user 0.94 @捏造压力（DeepSeek/MiMo）、loop guard、路由遥测、E8 消融 | e5-gate-ci, e2-mimo, **e8-routing** | ★★★★ |
+| C1 | **Decide-Act**（模型自路由）可行、真实被使用、且在不确定任务上决定性 | ask_user 0.94 @捏造压力、loop guard、E8：long-horizon 自路由 1.00 vs 固定管线 0.00（代价：流程化任务更贵） | e5-gate-ci, e2-mimo, **e8-routing** | ★★★★ |
 | C2 | **验证门消除假成功**（0.38–1.00 → 0.00，零误杀） | 18 模型 × 4 suite、CI 分离、捕获/误杀矩阵 1.00/0.00 | e1/e2/e4/e5-gate/e2m-* | ★★★★ |
 | C3 | **稀疏上下文激活**：同质量、成本不随规模涨 | 78× token 差 @160 docs、预算-质量平曲线、top-k 对照 | e5-sweep, e4 | ★★★★ |
-| C4 | **系统整体优于拼凑框架** | E7 跨框架：dataset 正确率 0.83 vs 0.17、假成功 0.00 vs 0.83；GIL 5.1×；内存 2.6×；单二进制 | e7-*, e6/e6b | ★★★☆ |
+| C4 | **系统级保证优于拼凑框架**（修正口径） | E7 v2：任务成功率接近，差异在**错误处理**——sfai 假成功钉 0.00（18 模型大样本佐证），LangGraph dataset fs 0.50；GIL 5.1×；内存 2.6× | e7-*v2, e6/e6b | ★★★☆ |
 | C5 | **三层记忆 Index/Wiki/Way**（出错记忆自沉淀） | 架构 + 自写/自动提取测试；（真实收益待 v2 对照） | tests/memory, ADR-023 | ★★★☆ |
 
 ## 3. 章节结构
@@ -79,7 +81,8 @@
 | 5.4 E5-gate CI | n=16 CI 分离 + ask_user 0.94 | T4 | e5-gate-ci |
 | 5.5 E2 跨模型 | 18 模型 Grand Table（含 MiMo） | **T5 主表** | e2m-* + e2-mimo + e1 |
 | 5.6 E7 跨框架 | LangGraph/smolagents/Pydantic AI vs sfai | T6 | e7-*, e7ext-* |
-| 5.7 E8 Decide-Act 消融 | 自路由 vs 强制管线 | T7 | e8-routing |
+| 5.7 E8 Decide-Act 消融 | 自路由 vs 强制管线（双向结果：long-horizon 1.00/0.00、dataset 0.25/0.75） | T7 | e8-routing |
+| 5.6b E7 修正史 | 三次判分器事故与修正（附录材料） | 附录 | e7 系列 + Debug 报告 |
 | 5.8 E6/E6b 性能 | 冷启动/大信封/GIL 5.1×/内存 | T8、F2 扩展曲线 | e6 系列 |
 
 ### 6 Analysis
@@ -88,7 +91,8 @@
 - 成本-质量权衡：验证门 +3.4× token 换假成功归零——Pareto 叙事。
 
 ### 7 Limitations & Threats to Validity
-- n 小（2–16/cell）、合成套件、单机延迟、订阅制计价（MiMo/百炼）、判分器修正记录（3 次）、并发扫描延迟噪声、LangChain 臂无验证层为框架原样。
+- n 小（2–16/cell）、合成套件、单机延迟、订阅制计价（MiMo/百炼）、判分器修正记录（3 次，作废两版数字）、并发扫描延迟噪声、LangChain 臂无验证层为框架原样；
+- E8 双向结果需如实呈现（自路由非处处优），主张限定为"不确定性任务上的适应性优势"。
 
 ### 8 Conclusion + Future Work
 - Way 记忆的真实收益对照（v2）、公开基准（GAIA/SWE-bench）、预算 Pareto 扫描（E5 扩展）、多租户 ACL。
@@ -100,7 +104,7 @@
 | F1 | 质量-成本 Pareto（预算扫描 × 策略） | evals/reports/e5-sweep.json |
 | F2 | 并发吞吐（GIL 平线 vs Rust 5.1×） | E6b 数据 |
 | T5 | **主表**：18 模型 × 4 suite（fs 门/无门） | scripts/grand_model_table.py |
-| T6 | 跨框架对比（含判分器修正记录） | e7 系列 |
+| T6 | 跨框架对比 v2（修正口径，含判分器修正史） | e7 系列 v2 |
 | T7 | Decide-Act 消融 | e8-routing |
 
 ## 5. 目标 venue

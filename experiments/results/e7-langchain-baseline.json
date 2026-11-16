@@ -1,6 +1,6 @@
 {
   "version": "0.2.1",
-  "generated_at": "2026-11-16T12:14:43Z",
+  "generated_at": "2026-11-16T15:22:34Z",
   "suites": [
     "dataset",
     "tool-use"
@@ -22,14 +22,14 @@
       "suite": "dataset",
       "ablation": "none",
       "tasks": 6,
-      "success_rate": 0.8333333333333334,
-      "correctness": 0.16666666666666666,
-      "false_success_rate": 0.8333333333333334,
-      "p50_latency_ms": 3032.008542038966,
-      "p95_latency_ms": 7984.611583000515,
-      "mean_input_tokens": 1918.0,
-      "mean_output_tokens": 306.8333333333333,
-      "mean_cost_usd": 0.0008553766666666668
+      "success_rate": 0.5,
+      "correctness": 0.0,
+      "false_success_rate": 0.5,
+      "p50_latency_ms": 2195.7576670101844,
+      "p95_latency_ms": 2996.3137499871664,
+      "mean_input_tokens": 779.5,
+      "mean_output_tokens": 113.83333333333333,
+      "mean_cost_usd": 0.0003356816666666667
     },
     {
       "suite": "tool-use",
@@ -38,11 +38,11 @@
       "success_rate": 1.0,
       "correctness": 1.0,
       "false_success_rate": 0.0,
-      "p50_latency_ms": 9314.104707969818,
-      "p95_latency_ms": 10356.799583998509,
-      "mean_input_tokens": 3242.6666666666665,
-      "mean_output_tokens": 1288.5,
-      "mean_cost_usd": 0.0022928700000000002
+      "p50_latency_ms": 8624.237790994812,
+      "p95_latency_ms": 10316.048459033482,
+      "mean_input_tokens": 3210.8333333333335,
+      "mean_output_tokens": 1268.1666666666667,
+      "mean_cost_usd": 0.0022619083333333336
     }
   ],
   "tasks": [
@@ -54,10 +54,10 @@
       "acceptance_passed": false,
       "correct": false,
       "false_success": true,
-      "latency_ms": 2549.597791978158,
+      "latency_ms": 2195.7576670101844,
       "input_tokens": 1559,
-      "output_tokens": 208,
-      "cost_usd": 0.0006497300000000001,
+      "output_tokens": 173,
+      "cost_usd": 0.00061123,
       "error": null
     },
     {
@@ -68,10 +68,10 @@
       "acceptance_passed": true,
       "correct": true,
       "false_success": false,
-      "latency_ms": 8296.085291949566,
-      "input_tokens": 2657,
-      "output_tokens": 1113,
-      "cost_usd": 0.0019416900000000003,
+      "latency_ms": 7387.441500031855,
+      "input_tokens": 2714,
+      "output_tokens": 1204,
+      "cost_usd": 0.00205718,
       "error": null
     },
     {
@@ -82,10 +82,10 @@
       "acceptance_passed": false,
       "correct": false,
       "false_success": true,
-      "latency_ms": 3374.6139160357416,
-      "input_tokens": 1649,
-      "output_tokens": 269,
-      "cost_usd": 0.00074113,
+      "latency_ms": 2996.3137499871664,
+      "input_tokens": 1559,
+      "output_tokens": 267,
+      "cost_usd": 0.00071463,
       "error": null
     },
     {
@@ -96,25 +96,25 @@
       "acceptance_passed": true,
       "correct": true,
       "false_success": false,
-      "latency_ms": 8703.411374997813,
-      "input_tokens": 2690,
-      "output_tokens": 1273,
-      "cost_usd": 0.0021266,
+      "latency_ms": 8901.533750002272,
+      "input_tokens": 2882,
+      "output_tokens": 1355,
+      "cost_usd": 0.0022686400000000006,
       "error": null
     },
     {
       "spec_id": "data-02-r0",
       "suite": "dataset",
       "ablation": "none",
-      "status": "completed",
+      "status": "error",
       "acceptance_passed": false,
       "correct": false,
-      "false_success": true,
-      "latency_ms": 7984.611583000515,
-      "input_tokens": 5182,
-      "output_tokens": 863,
-      "cost_usd": 0.0023484400000000002,
-      "error": null
+      "false_success": false,
+      "latency_ms": 840.8678330015391,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "error": "run failed"
     },
     {
       "spec_id": "tool-02-r0",
@@ -124,10 +124,10 @@
       "acceptance_passed": true,
       "correct": true,
       "false_success": false,
-      "latency_ms": 10356.799583998509,
-      "input_tokens": 4125,
-      "output_tokens": 1383,
-      "cost_usd": 0.00263505,
+      "latency_ms": 8624.237790994812,
+      "input_tokens": 2806,
+      "output_tokens": 1247,
+      "cost_usd": 0.00212932,
       "error": null
     },
     {
@@ -138,10 +138,10 @@
       "acceptance_passed": false,
       "correct": false,
       "false_success": true,
-      "latency_ms": 2935.0888750050217,
+      "latency_ms": 2809.428167005535,
       "input_tokens": 1559,
-      "output_tokens": 260,
-      "cost_usd": 0.00070693,
+      "output_tokens": 243,
+      "cost_usd": 0.00068823,
       "error": null
     },
     {
@@ -152,25 +152,25 @@
       "acceptance_passed": true,
       "correct": true,
       "false_success": false,
-      "latency_ms": 9314.104707969818,
-      "input_tokens": 2728,
-      "output_tokens": 1233,
-      "cost_usd": 0.00209286,
+      "latency_ms": 8299.792083969805,
+      "input_tokens": 4034,
+      "output_tokens": 1275,
+      "cost_usd": 0.0024916800000000005,
       "error": null
     },
     {
       "spec_id": "data-01-r1",
       "suite": "dataset",
       "ablation": "none",
-      "status": "completed",
+      "status": "error",
       "acceptance_passed": false,
       "correct": false,
-      "false_success": true,
-      "latency_ms": 3032.008542038966,
-      "input_tokens": 1559,
-      "output_tokens": 241,
-      "cost_usd": 0.00068603,
-      "error": null
+      "false_success": false,
+      "latency_ms": 871.3274580077268,
+      "input_tokens": 0,
+      "output_tokens": 0,
+      "cost_usd": 0.0,
+      "error": "run failed"
     },
     {
       "spec_id": "tool-01-r1",
@@ -180,10 +180,10 @@
       "acceptance_passed": true,
       "correct": true,
       "false_success": false,
-      "latency_ms": 8411.213249957655,
-      "input_tokens": 2827,
-      "output_tokens": 1350,
-      "cost_usd": 0.0022482900000000004,
+      "latency_ms": 10316.048459033482,
+      "input_tokens": 4228,
+      "output_tokens": 1494,
+      "cost_usd": 0.0027849600000000004,
       "error": null
     },
     {
@@ -191,10 +191,10 @@
       "suite": "dataset",
       "ablation": "none",
       "status": "error",
-      "acceptance_passed": true,
-      "correct": true,
+      "acceptance_passed": false,
+      "correct": false,
       "false_success": false,
-      "latency_ms": 1130.9104170068167,
+      "latency_ms": 1048.6272920388728,
       "input_tokens": 0,
       "output_tokens": 0,
       "cost_usd": 0.0,
@@ -208,10 +208,10 @@
       "acceptance_passed": true,
       "correct": true,
       "false_success": false,
-      "latency_ms": 9663.36374997627,
-      "input_tokens": 4429,
-      "output_tokens": 1379,
-      "cost_usd": 0.00271273,
+      "latency_ms": 7363.123374991119,
+      "input_tokens": 2601,
+      "output_tokens": 1034,
+      "cost_usd": 0.00183967,
       "error": null
     }
   ],
