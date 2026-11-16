@@ -69,15 +69,26 @@ python3 scripts/compare_results.py experiments/results/*.json
 
 `experiments/analysis/e1-e4-deepseek-analysis.md`（含对论文的含义与诚实限定）。
 
-### 5.4 E2-MiMo 状态
+### 5.4 E2-MiMo 结果（已完成）
 
-mimo-v2.6-pro（Token Plan，`token-plan-cn.xiaomimimo.com/v1`）48 运行执行中：
-推理型模型单次调用 30–120s，预计总时长 1.5–3h。冒烟已验证连通（直答 2.2s）。
-结果落盘于 `experiments/results/e2-mimo-baseline.json`，完成后并入对比表。
+mimo-v2.6-pro（Token Plan，`token-plan-cn.xiaomimimo.com/v1`）48 运行完成（1 次 228s 超时）：
+
+| suite | ablation | success | correct | false-success |
+|---|---|---|---|---|
+| dataset | none | 1.00 | 1.00 | 0.00 |
+| tool-use | none | 1.00 | 1.00 | 0.00 |
+| long-horizon | none | 1.00 | 1.00 | 0.00 |
+| edge-case | none | 0.00 | 0.00 | 0.00 |
+| edge-case | no_verification | 0.67 | 0.00 | **0.67** |
+
+**验证门价值第三次复现（跨 provider）**：MiMo 无验证时 4/6 捏造引用并"成功"（假成功 0.67）；
+开验证后 0.00 —— 且 3 次模型主动 `ask_user` 拒绝捏造、3 次被验收拦截。MiMo 正确性全面
+强于 DeepSeek（dataset 1.00 vs 0.50）、输入 token 更省，但延迟高 2–7×（推理型）。
+对比表：`experiments/analysis/` 与 `scripts/compare_results.py` 输出。
 
 ## 6. 遗留项（Known issues / Remaining）
 
-1. **E2-MiMo 尚未完成**（执行中）；Qwen 按用户指示暂缓。
+1. Qwen 按用户指示暂缓（E2 对比现为 DeepSeek vs MiMo 双方）。
 2. **bench 无进度输出**（只打错误行）——后续加 per-task 进度行（观测缺口）。
 3. **MiMo Token Plan 无按量单价**：成本按 0 计价，比较以 token 为主（已在 config note 中标注）。
 4. **n 小（4–6/cell）**：CI 宽；v2 需扩样本（repetitions 5+）并加 E5 预算扫描。

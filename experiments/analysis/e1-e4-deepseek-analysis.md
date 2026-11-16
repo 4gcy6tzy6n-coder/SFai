@@ -1,7 +1,7 @@
-# E1 / E4 实验分析 — DeepSeek (deepseek-chat) 真实模型
+# E1 / E4 / E2 实验分析 — DeepSeek + MiMo 真实模型
 
 **日期:** 2026-11-16 · **框架版本:** bench v0.2.1 · **提交:** 见 `git log` 当日记录
-**运行:** 88 次真实模型运行（E1 48 + E4 40），**0 运行时错误**（含协议修复重试与传输重试后）
+**运行:** 136 次真实模型运行（E1 48 + E4 40 + E2-MiMo 48），1 次超时错误（E2），其余全部干净
 **限定:** n=4~6/cell，Wilson 95% CI；单机本地 SQLite；价格为近似值（0.27/1.10 USD/1M）
 
 ## E1 — 基线（4 suites × none/no_verification × 3 任务 × 2 重复）
@@ -51,13 +51,49 @@
    属噪声）；pinned 约束在该 suite 未构成瓶颈（模型本就遵守约束）。
 4. **验证的延迟成本可测但可控**（none p50 15.5s vs no_verification 7.5s，含修复轮）。
 
+## E2 — MiMo 对比（mimo-v2.6-pro / Token Plan，48 运行，1 超时错误）
+
+| suite | ablation | success | correct | false-success | in tokens | p50 |
+|---|---|---|---|---|---|---|
+| dataset | none | **1.00** | **1.00** | 0.00 | 5398 | 55.1s |
+| long-horizon | none | 1.00 | 1.00 | 0.00 | 12654 | 39.5s |
+| tool-use | none | 1.00 | 1.00 | 0.00 | 10037 | 65.5s |
+| edge-case | none | 0.00 | 0.00 | **0.00** | 4155 | 79.6s |
+| edge-case | no_verification | 0.67 | 0.00 | **0.67** | 2979 | 37.4s |
+
+### 跨 provider 对比（none 配置）
+
+| 指标 | DeepSeek chat | MiMo v2.6-pro |
+|---|---|---|
+| dataset 正确率 | 0.50 | **1.00** |
+| tool-use 正确率 | 1.00 | 1.00 |
+| long-horizon 正确率 | 1.00 | 1.00 |
+| edge-case 假成功（无验证） | 0.17 | **0.67** |
+| edge-case 假成功（有验证） | 0.00 | **0.00** |
+| tool-use 输入 token | 20936 | **10037** |
+| p50 延迟 | 8–28s | 39–80s |
+| 计价 | 0.27/1.10 USD/1M | Token Plan 订阅（比 token） |
+
+### 关键发现
+
+1. **验证门价值跨 provider 复现（第三个独立证据）。** MiMo 无验证时捏造引用并"成功"
+   4/6（假成功 0.67）；开验证后假成功 **0.00** —— 而且 6 次里 3 次模型主动 `ask_user`
+   拒绝捏造、3 次被验收拦截为 blocked。自路由的 ask_user 意图在真实压力下被真实使用。
+2. **MiMo 正确性更强**（dataset 1.00 vs 0.50），输入 token 更省（tool-use 10037 vs 20936），
+   但延迟高 2–7×（推理型模型）——质量-延迟-成本三角的典型案例，直接进论文对比表。
+3. **DeepSeek 抗捏造但正确率略低**：edge-case 无验证也拒绝完成（0.67 vs MiMo 的完成），但
+   dataset 计算弱于 MiMo。两个模型的失败模式互补，验证门对两者都必要。
+
 ## 对论文的含义
 
 - **贡献点 1（RQ1/RQ2）：** 稀疏上下文激活（受控 envelope）在真实模型上以 ~35–65% 的 token 达到
   与 full_context 相同的正确率（E4 long-horizon；E1 tool-use 的 envelope 均 < full 预算）。
 - **贡献点 2（RQ4）：** 独立验证门把假成功从 0.50–0.75 压到 **0.00**（E1+E4 双 suite 复现），
   代价是 +20–40% token 与 +5–10s 延迟 —— 质量-成本 Pareto 的核心权衡点。
-- **诚实限定：** n 小（4–6/cell）、单 provider、合成任务；需 v2 扩样本 + Qwen/MiMo 横向 + E5 预算扫描。
+- **贡献点 3（RQ3）：** 跨 provider（DeepSeek/MiMo）差异显著但验证门收益一致——
+  框架的安全性质不依赖特定模型。
+- **诚实限定：** n 小（4–6/cell）、合成任务、MiMo 订阅计价无法折算 USD；需 v2 扩样本
+  （repetitions 5+）、Qwen（暂缓）与 E5 预算扫描。
 
 ## 复现
 
