@@ -25,7 +25,16 @@ CANNED = [
 def dataset_rows(i: int, seed: int):
     return [((i * 7 + row * 13 + seed) % 97 + 10) for row in range(8)]
 
+def clear_deliverables():
+    """Remove any prior deliverables (agents pick their own filenames)."""
+    for f in WORKSPACE.iterdir():
+        if f.name != "sales.csv":
+            f.unlink()
+
 def check(rules):
+    """Framework-agnostic checker: dataset = answer value anywhere in answer.json;
+    tool-use = >=3 distinct source:// refs in ANY deliverable file the agent wrote
+    (filename-agnostic — agents choose their own paths)."""
     expected, kind = rules[0], rules[1]
     try:
         if kind == "dataset":
@@ -39,9 +48,15 @@ def check(rules):
                 except (TypeError, ValueError):
                     continue
             return False
-        text = (WORKSPACE / "report.md").read_text()
-        refs = set(re.findall(r"source://[A-Za-z0-9_\-]+@[0-9]+", text))
-        return len(refs) >= 3
+        best = 0
+        for f in WORKSPACE.iterdir():
+            if f.is_file():
+                try:
+                    refs = set(re.findall(r"source://[A-Za-z0-9_\-]+@[0-9]+", f.read_text()))
+                    best = max(best, len(refs))
+                except Exception:  # noqa: BLE001
+                    continue
+        return best >= 3
     except Exception:  # noqa: BLE001
         return False
 
@@ -165,6 +180,7 @@ def tasks():
         for i in range(3):
             total = sum(dataset_rows(i, rep))
             csv = "row,amount\n" + "\n".join(f"{r},{a}" for r, a in enumerate(dataset_rows(i, rep)))
+            clear_deliverables()
             (WORKSPACE / "sales.csv").write_text(csv)
             out.append((f"data-{i:02d}-r{rep}",
                         f"Compute the total revenue from sales.csv and write answer.json (case {i}, seed {rep}).",
@@ -181,6 +197,12 @@ def main():
         rows = []
         for spec_id, goal, rules in tasks():
             print(f"[{name}] {spec_id} ...", file=sys.stderr)
+            clear_deliverables()
+            if rules[1] == "dataset":
+                i = int(spec_id.split("-")[1])
+                rep = int(spec_id.split("-r")[1])
+                csv = "row,amount\n" + "\n".join(f"{r},{a}" for r, a in enumerate(dataset_rows(i, rep)))
+                (WORKSPACE / "sales.csv").write_text(csv)
             rows.append(RUNNERS[name](goal, rules, spec_id))
         metrics = []
         for suite in ["dataset", "tool-use"]:

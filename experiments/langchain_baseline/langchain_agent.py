@@ -94,12 +94,16 @@ def run_task(llm, goal: str, rules: list[str], spec_id: str) -> dict:
         except Exception:  # noqa: BLE001
             correct = False
     else:
-        try:
-            text = (WORKSPACE / "report.md").read_text()
-            refs = set(re.findall(r"source://[A-Za-z0-9_\-]+@[0-9]+", text))
-            correct = len(refs) >= 3
-        except Exception:  # noqa: BLE001
-            correct = False
+        # filename-agnostic: any deliverable the agent wrote counts
+        best = 0
+        for f in WORKSPACE.iterdir():
+            if f.is_file():
+                try:
+                    refs = set(re.findall(r"source://[A-Za-z0-9_\-]+@[0-9]+", f.read_text()))
+                    best = max(best, len(refs))
+                except Exception:  # noqa: BLE001
+                    continue
+        correct = best >= 3
     acceptance = correct
     false_success = status == "completed" and not (acceptance and correct)
     cost = usage["input"] / 1e6 * 0.27 + usage["output"] / 1e6 * 1.10
@@ -135,6 +139,9 @@ def main():
     rows = []
     for spec_id, goal, rules in tasks:
         print(f"running {spec_id} ...", file=sys.stderr)
+        for f in WORKSPACE.iterdir():
+            if f.name != "sales.csv":
+                f.unlink()
         rows.append(run_task(llm, goal, rules, spec_id))
 
     metrics = []
