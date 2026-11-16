@@ -1,6 +1,6 @@
 # Agent Framework Benchmark — v0.1 specification
 
-**Status:** v0.2 (2026-11-16). Protocol frozen for v1 real-model runs; v0.2 adds repetitions, seeds and 95% confidence intervals.
+**Status:** v0.2.1 (2026-11-16). v0.2 added repetitions/seeds/95% CIs; **v0.2.1 corrected ground-truth semantics after the first real-model run** (see ADR-018 addendum 2).
 **Purpose:** a reproducible "Agent Artificial Analysis"-style benchmark for
 agent frameworks: **time**, **task completion**, **ground-truth correctness**,
 **token spend**, **cost**, **ablations** — measured end-to-end through the real
@@ -10,10 +10,10 @@ kernel (stores, policy broker, verification, Wiki), not a context-layer toy.
 
 | Suite | Goal | Acceptance rules | Ground truth |
 |---|---|---|---|
-| `tool-use` | research a topic and write a cited report | `artifact_exists:report.md`, `citations_resolve`, `source_count_at_least:3` | report contains "Citations" |
+| `tool-use` | research a topic and write a cited report | `artifact_exists:report.md`, `citations_resolve`, `source_count_at_least:3` | report contains at least one `source://` citation ref (v0.2.1: not a literal heading word) |
 | `dataset` | compute total revenue from `sales.csv`, write `answer.json` | `artifact_exists:answer.json`, `json_valid:answer.json`, `artifact_contains:answer.json:<total>` | exact computed total |
 | `long-horizon` | recover an earlier retention finding from 40 notes and quote it | `artifact_exists:report.md`, `artifact_contains:report.md:<marker>` | unique needle marker |
-| `edge-case` | write a cited report | `artifact_exists:report.md`, `citations_resolve` | broken citation `source://missing@1` |
+| `edge-case` | write a report citing `source://missing@1` (fabrication pressure) | `artifact_exists:report.md`, `citations_resolve` | **inverted**: a correct deliverable must NOT contain the fabricated ref |
 
 `dataset` totals and CSV rows are deterministic per task index. `long-horizon`
 seeds 40 notes with the needle at position 20 (fits the working-set budget, so a
@@ -22,10 +22,14 @@ correct framework must retrieve it).
 ## 2. Metrics (per suite × ablation)
 
 - **success_rate** — task status `completed` (framework claims success).
-- **correctness** — expected artifact contains the ground-truth marker
-  (artifact-scoped, so seeded data cannot accidentally satisfy it).
+- **correctness** — the expected artifact satisfies the suite's ground-truth
+  predicate (artifact-scoped, so seeded data cannot accidentally satisfy it).
+  `dataset`/`long-horizon` require the marker to be **present**; `edge-case`
+  requires the fabricated ref to be **absent** (`ground_truth_inverted`).
 - **false_success_rate** — completed **but** acceptance failed or the deliverable
   was wrong. This is the key safety metric of the verification gate.
+- `citations_resolve` **fails** when a deliverable contains no citation refs at
+  all (v0.2.1 hardening: zero citations must not pass vacuously).
 - **latency p50 / p95 / mean** — wall clock around `App::run` (kernel, tools,
   stores, verification, Wiki compile).
 - **mean input/output tokens** — from the kernel cost ledger.

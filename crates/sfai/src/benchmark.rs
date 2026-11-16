@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::time::Instant;
 
-pub const BENCH_VERSION: &str = "0.2.0";
+pub const BENCH_VERSION: &str = "0.2.1";
 pub const DEFAULT_SIZE: usize = 6;
 pub const SUITES: [&str; 4] = ["tool-use", "dataset", "long-horizon", "edge-case"];
 pub const ABLATIONS: [&str; 5] = [
@@ -75,8 +75,13 @@ pub struct BenchSpec {
     pub goal: String,
     pub constraints: Vec<String>,
     pub acceptance_rules: Vec<String>,
-    /// Ground-truth marker that a correct deliverable must contain.
+    /// Ground-truth marker that a correct deliverable must contain
+    /// (or must NOT contain when `ground_truth_inverted`, e.g. fabricated refs).
     pub ground_truth: String,
+    /// When true, a correct deliverable must NOT contain the marker
+    /// (fabrication detection, used by edge-case).
+    #[serde(default)]
+    pub ground_truth_inverted: bool,
     pub seed: u64,
 }
 
@@ -97,6 +102,9 @@ pub struct BenchTaskResult {
     pub output_tokens: u64,
     pub tool_calls: u64,
     pub cost_usd: f64,
+    /// Populated when the run ended in error (model/provider/runtime failure).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, Default)]
@@ -217,7 +225,8 @@ pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSp
                     "citations_resolve".into(),
                     "source_count_at_least:3".into(),
                 ],
-                ground_truth: "Citations".into(),
+                ground_truth: "source://".into(),
+                ground_truth_inverted: false,
                 seed,
             })
             .collect(),
@@ -237,6 +246,7 @@ pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSp
                         format!("artifact_contains:answer.json:{total}"),
                     ],
                     ground_truth: total.to_string(),
+                    ground_truth_inverted: false,
                     seed,
                 }
             })
@@ -256,6 +266,7 @@ pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSp
                         format!("artifact_contains:report.md:{marker}"),
                     ],
                     ground_truth: marker,
+                    ground_truth_inverted: false,
                     seed,
                 }
             })
@@ -264,13 +275,16 @@ pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSp
             .map(|i| BenchSpec {
                 id: format!("edge-{i:02}"),
                 suite: "edge-case".into(),
-                goal: format!("Write a report citing a source (case {i}, seed {seed})."),
+                goal: format!(
+                    "Write a report citing source://missing@1 (case {i}, seed {seed})."
+                ),
                 constraints: vec!["Every citation must resolve.".into()],
                 acceptance_rules: vec![
                     "artifact_exists:report.md".into(),
                     "citations_resolve".into(),
                 ],
                 ground_truth: "source://missing@1".into(),
+                ground_truth_inverted: true,
                 seed,
             })
             .collect(),
@@ -602,9 +616,9 @@ pub fn run_benchmark_full(
                     let result = app.run_observed(model.as_mut(), &task.task_id, 50, &mut observer);
                     let latency_ms = started.elapsed().as_secs_f64() * 1000.0;
 
-                    let status = match &result {
-                        Ok(r) => r.status.as_str().to_string(),
-                        Err(_) => "error".to_string(),
+                    let (status, error) = match &result {
+                        Ok(r) => (r.status.as_str().to_string(), None),
+                        Err(e) => ("error".to_string(), Some(e.to_string())),
                     };
                     let (acceptance_passed, correct) = match &result {
                         Ok(_) => {
@@ -628,7 +642,15 @@ pub fn run_benchmark_full(
                                         .any(|a| {
                                             app.objects
                                                 .read_artifact_text(&a.artifact_id)
-                                                .map(|text| text.contains(&spec.ground_truth))
+                                                .map(|text| {
+                                                    let contains =
+                                                        text.contains(&spec.ground_truth);
+                                                    if spec.ground_truth_inverted {
+                                                        !contains
+                                                    } else {
+                                                        contains
+                                                    }
+                                                })
                                                 .unwrap_or(false)
                                         })
                                 })
@@ -643,6 +665,12 @@ pub fn run_benchmark_full(
                         Ok(r) => r.cost.clone(),
                         Err(_) => Value::Null,
                     };
+                    if let Some(err) = &error {
+                        eprintln!(
+                            "[bench] {}/{}/{} {} FAILED: {}",
+                            suite, ablation, repetition, spec.id, err
+                        );
+                    }
                     let num = |key: &str| cost.get(key).and_then(|v| v.as_u64()).unwrap_or(0);
                     tasks.push(BenchTaskResult {
                         task_id: task.task_id.clone(),
@@ -660,6 +688,7 @@ pub fn run_benchmark_full(
                         output_tokens: num("output_tokens"),
                         tool_calls: num("tool_calls"),
                         cost_usd: cost.get("cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                        error,
                     });
                 }
             }

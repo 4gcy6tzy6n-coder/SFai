@@ -15,6 +15,10 @@ pub const DEFAULT_DEEPSEEK_BASE: &str = "https://api.deepseek.com/v1";
 pub const DEFAULT_DEEPSEEK_MODEL: &str = "deepseek-chat";
 pub const DEFAULT_QWEN_BASE: &str = "https://dashscope.aliyuncs.com/compatible-mode/v1";
 pub const DEFAULT_QWEN_MODEL: &str = "qwen-plus";
+/// Token Plan (CN) cluster for personal/team keys (tp-/ttp-). Override with
+/// XIAOMI_MIMO_BASE_URL for other clusters (token-plan-sgp / token-plan-ams).
+pub const DEFAULT_MIMO_BASE: &str = "https://token-plan-cn.xiaomimimo.com/v1";
+pub const DEFAULT_MIMO_MODEL: &str = "mimo-v2.6-pro";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct ProviderProfile {
@@ -108,10 +112,10 @@ pub fn builtin_profiles() -> Vec<ProviderProfile> {
             name: "mimo".into(),
             base_url: env_non_empty("XIAOMI_MIMO_BASE_URL")
                 .or_else(|| env_non_empty("MIMO_BASE_URL"))
-                .unwrap_or_default(),
+                .unwrap_or_else(|| DEFAULT_MIMO_BASE.into()),
             model: env_non_empty("XIAOMI_MIMO_MODEL")
                 .or_else(|| env_non_empty("MIMO_MODEL"))
-                .unwrap_or_else(|| "mimo".into()),
+                .unwrap_or_else(|| DEFAULT_MIMO_MODEL.into()),
             api_key_envs: vec![
                 "XIAOMI_MIMO_API_KEY".into(),
                 "MIMO_API_KEY".into(),
@@ -119,7 +123,7 @@ pub fn builtin_profiles() -> Vec<ProviderProfile> {
             ],
             price_input_per_million: 0.0,
             price_output_per_million: 0.0,
-            note: "Xiaomi MiMo: set XIAOMI_MIMO_BASE_URL / XIAOMI_MIMO_MODEL and prices until official defaults are recorded".into(),
+            note: "Xiaomi MiMo Token Plan (tp-/ttp- keys; subscription quota, so per-token USD cost is not meaningful — compare tokens). Also try mimo-v2.6-flash.".into(),
         },
         ProviderProfile {
             name: "custom".into(),

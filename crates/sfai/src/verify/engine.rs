@@ -423,6 +423,16 @@ impl VerificationEngine {
         }
         let last = artifacts.last().unwrap();
         let target = format!("artifact://{}@{}", last.artifact_id, last.version);
+        if checked == 0 {
+            return Ok(self.fail(
+                &target,
+                criterion,
+                "NO_CITATIONS_FOUND",
+                "deliverable contains no citation refs at all",
+                "Add resolvable source:// or artifact:// citations to the deliverable.",
+                Vec::new(),
+            ));
+        }
         if !broken.is_empty() {
             let mut diag = diagnostic(
                 Verdict::Fail,

@@ -1,10 +1,21 @@
 {
   "name": "e2-mimo-baseline",
   "provider": "mimo",
-  "suites": ["tool-use", "dataset", "long-horizon", "edge-case"],
-  "ablations": ["none", "no_verification"],
+  "suites": [
+    "tool-use",
+    "dataset",
+    "long-horizon",
+    "edge-case"
+  ],
+  "ablations": [
+    "none",
+    "no_verification"
+  ],
   "size": 3,
   "repetitions": 2,
   "seed": 0,
-  "note": "E2: provider comparison baseline (Xiaomi MiMo; set XIAOMI_MIMO_BASE_URL/MODEL/API_KEY and prices)"
+  "note": "E2: provider comparison (Xiaomi MiMo Token Plan, mimo-v2.6-pro; subscription quota — compare tokens, not USD)",
+  "model": "mimo-v2.6-pro",
+  "price_in": 0.0,
+  "price_out": 0.0
 }

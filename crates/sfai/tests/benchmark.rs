@@ -87,7 +87,7 @@ fn report_renders_all_suites_and_ablations() {
     assert!(markdown.contains("no_wiki"));
     assert!(markdown.contains("false-success"));
     assert!(report.to_json().contains("\"metrics\""));
-    assert_eq!(report.version, "0.2.0");
+    assert_eq!(report.version, "0.2.1");
 }
 
 #[test]

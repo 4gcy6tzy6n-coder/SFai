@@ -13,7 +13,7 @@ use crate::telemetry::cost::{PRICE_PER_MILLION_INPUT, PRICE_PER_MILLION_OUTPUT};
 use serde_json::{json, Value};
 use std::time::Duration;
 
-const MAX_ATTEMPTS: u32 = 3;
+const MAX_ATTEMPTS: u32 = 5;
 
 pub const SYSTEM_PROMPT: &str = r#"You are sfai's decision kernel. Each step produce EXACTLY ONE action intent.
 Prefer calling the tool `submit_action` (or reply with the same JSON object only).
@@ -196,7 +196,18 @@ impl OpenAICompatibleAdapter {
         })
     }
 
+    /// Resolve the first *configured* provider profile (deepseek, qwen, mimo,
+    /// then custom SFAI_MODEL_*), so every call site picks up whatever key the
+    /// user has exported. Falls back to an empty (loudly-failing) adapter.
     pub fn from_env() -> Self {
+        use crate::integrations::providers::profiles::builtin_profiles;
+        for profile in builtin_profiles() {
+            if profile.is_configured() {
+                if let Ok(adapter) = Self::from_profile(&profile) {
+                    return adapter;
+                }
+            }
+        }
         Self::new(
             &std::env::var("SFAI_MODEL_BASE_URL").unwrap_or_default(),
             &std::env::var("SFAI_MODEL_API_KEY").unwrap_or_default(),
@@ -282,15 +293,44 @@ impl ModelAdapter for OpenAICompatibleAdapter {
             ));
         }
         let url = format!("{}/chat/completions", self.base_url.trim_end_matches('/'));
-        let body = self.request_body(envelope);
+        let task_id = Self::task_id_from_envelope(envelope);
+        let mut body = self.request_body(envelope);
         let payload = self.send_with_retries(&url, &body)?;
-        normalize_response_priced(
+        match normalize_response_priced(
             &self.model_id(),
             &payload,
-            &Self::task_id_from_envelope(envelope),
+            &task_id,
             self.price_input_per_million,
             self.price_output_per_million,
-        )
+        ) {
+            Ok(response) => Ok(response),
+            Err(first_error) => {
+                // Protocol-repair retry: models sometimes emit truncated JSON
+                // or a pseudo-kind. One corrective round-trip, then give up.
+                if let Some(messages) = body.get_mut("messages").and_then(|m| m.as_array_mut()) {
+                    messages.push(json!({
+                        "role": "user",
+                        "content": format!(
+                            "Your previous response could not be parsed as an action intent: {first_error}. \
+                             Reply with exactly one corrected JSON action intent (kind/task_id/payload)."
+                        ),
+                    }));
+                }
+                let payload = self.send_with_retries(&url, &body)?;
+                normalize_response_priced(
+                    &self.model_id(),
+                    &payload,
+                    &task_id,
+                    self.price_input_per_million,
+                    self.price_output_per_million,
+                )
+                .map_err(|e| {
+                    ModelError::Provider(format!(
+                        "invalid intent after repair retry: {e} (first: {first_error})"
+                    ))
+                })
+            }
+        }
     }
 }
 
@@ -408,6 +448,68 @@ mod tests {
         });
         let resp = normalize_response_priced("m", &payload, "t", 2.0, 6.0).unwrap();
         assert!((resp.usage.cost_usd - 8.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn repair_retry_recovers_from_malformed_intent() {
+        // First response: truncated JSON args. Second: valid intent.
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        let handle = std::thread::spawn(move || {
+            let bad = json!({
+                "choices": [{"message": {"tool_calls": [{"function": {
+                    "name": "submit_action",
+                    "arguments": "{\"kind\":\"execute\",\"payload\":{\"operation_id\":\"web.search\","
+                }}]}}],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5}
+            });
+            let good = json!({
+                "choices": [{"message": {"tool_calls": [{"function": {
+                    "name": "submit_action",
+                    "arguments": "{\"kind\":\"respond\",\"payload\":{\"text\":\"42\"}}"
+                }}]}}],
+                "usage": {"prompt_tokens": 12, "completion_tokens": 6}
+            });
+            for body in [bad, good] {
+                let (mut stream, _) = listener.accept().expect("accept");
+                let mut buf: Vec<u8> = Vec::new();
+                let mut tmp = [0u8; 4096];
+                loop {
+                    let n = stream.read(&mut tmp).expect("read");
+                    if n == 0 {
+                        break;
+                    }
+                    buf.extend_from_slice(&tmp[..n]);
+                    let text = String::from_utf8_lossy(&buf).to_string();
+                    if let Some(hdr_end) = text.find("\r\n\r\n") {
+                        let content_length = text[..hdr_end]
+                            .lines()
+                            .find_map(|l| {
+                                l.to_ascii_lowercase()
+                                    .strip_prefix("content-length:")
+                                    .map(|v| v.trim().parse::<usize>().unwrap_or(0))
+                            })
+                            .unwrap_or(0);
+                        if buf.len() >= hdr_end + 4 + content_length {
+                            break;
+                        }
+                    }
+                }
+                let body = body.to_string();
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                    body.len(),
+                    body
+                );
+                stream.write_all(response.as_bytes()).expect("write");
+            }
+        });
+        let mut adapter =
+            OpenAICompatibleAdapter::new(&format!("http://{addr}"), "test-key", "mock-model");
+        let response = adapter.decide(&envelope()).expect("repair succeeds");
+        handle.join().expect("join");
+        assert_eq!(response.intent.kind, IntentKind::Respond);
+        assert_eq!(response.intent.payload["text"], "42");
     }
 
     #[test]

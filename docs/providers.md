@@ -23,14 +23,14 @@ sfai bench --provider deepseek --model deepseek-chat \
 |---|---|---|---|
 | `deepseek` | `DEEPSEEK_API_KEY` | `https://api.deepseek.com/v1` | `deepseek-chat` (also try `deepseek-reasoner`) |
 | `qwen` | `DASHSCOPE_API_KEY` (or `QWEN_API_KEY`) | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `qwen-plus` |
-| `mimo` | `XIAOMI_MIMO_API_KEY` (or `MIMO_API_KEY`) | set `XIAOMI_MIMO_BASE_URL` | set `XIAOMI_MIMO_MODEL` |
+| `mimo` | `XIAOMI_MIMO_API_KEY` (or `MIMO_API_KEY`) | `https://token-plan-cn.xiaomimimo.com/v1` (Token Plan) | `mimo-v2.6-pro` (or `mimo-v2.6-flash`) |
 | `custom` | `SFAI_MODEL_API_KEY` | `SFAI_MODEL_BASE_URL` | `SFAI_MODEL_NAME` |
 
 Overrides (any provider): `--model`, `--price-in`, `--price-out` (USD per 1M
 tokens); env: `<PROVIDER>_BASE_URL`, `<PROVIDER>_MODEL`.
 
 Pricing is **approximate** by default (`deepseek`: 0.27 / 1.10 USD per 1M;
-`qwen`: 0.40 / 1.20; `mimo`: 0 / 0 until recorded). Pass `--price-in/--price-out`
+`qwen`: 0.40 / 1.20; `mimo`: Token Plan is subscription-quota based; keep 0/0 and compare tokens). Pass `--price-in/--price-out`
 or set your contract prices before comparing cost numbers.
 
 ## Behaviour
@@ -46,6 +46,6 @@ or set your contract prices before comparing cost numbers.
 ## Troubleshooting
 
 - `provider ... is missing an API key`: export the env var listed above.
-- `provider ... has no base URL configured`: set the `*_BASE_URL` env (MiMo).
+- MiMo Token Plan keys (`tp-`/`ttp-`) use `https://token-plan-cn.xiaomimimo.com/v1`;\n  other clusters: set `XIAOMI_MIMO_BASE_URL` (e.g. `token-plan-sgp` / `token-plan-ams`).\n  Pay-as-you-go `sk-` keys use `https://api.xiaomimimo.com/v1` instead.
 - Reasoning-style models: some emit reasoning tokens; output-token cost reflects
   the provider's reported usage, so keep `--price-out` consistent with billing.

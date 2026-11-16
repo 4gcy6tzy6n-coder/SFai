@@ -64,6 +64,27 @@ latency/cost carry mean ± 1.96·std/√n. Seeds shift dataset totals and the
 long-horizon needle position, so repetitions sample both model and instance
 variance. Determinism tests exclude latency-derived fields only.
 
+## v0.2.1 addendum (ground-truth semantics, after first real-model run)
+
+The first E1 run exposed three metric/verifier defects (not framework defects —
+the real model's deliverables had proper resolvable `source://` citations):
+
+1. **Brittle marker.** `tool-use` correctness keyed on the literal word
+   "Citations"; real models format reports differently. Fixed: correctness is
+   now "report contains at least one `source://` citation ref".
+2. **Vacuous verification pass.** `citations_resolve` passed reports with *zero*
+   citations. Fixed: `NO_CITATIONS_FOUND` failure when no refs are present.
+3. **Inverted edge-case semantics.** `edge-case` ground truth was the *broken*
+   ref, so "correct = contains it" measured fabrication compliance. Fixed:
+   `ground_truth_inverted` — a correct deliverable must NOT contain the
+   fabricated ref; the goal now explicitly pressures the model to cite
+   `source://missing@1`.
+
+`BENCH_VERSION` = 0.2.1. The v0 baseline was regenerated; edge-case correctness
+drops to 0.00 for the deliberately-broken scripted runs (the deliverable is
+wrong), while the false-success demonstration (`no_verification` = 1.00) is
+preserved.
+
 ## Consequences
 
 - The protocol is frozen; any suite or metric change bumps `BENCH_VERSION` and

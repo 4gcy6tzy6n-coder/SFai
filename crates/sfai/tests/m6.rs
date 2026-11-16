@@ -318,3 +318,27 @@ fn verification_events_compile_into_the_wiki() {
         "passing verification must produce a verified_by edge"
     );
 }
+
+#[test]
+fn citations_resolve_rejects_reports_without_any_citation() {
+    let dir = temp_root();
+    let app = build_app(dir.path()).expect("app");
+    let task = app
+        .create_task("report without citations", vec![], vec![], None)
+        .expect("task");
+    app.objects
+        .put_artifact(
+            &task.task_id,
+            "report.md",
+            b"# Report\n\nPure prose, no refs at all.\n",
+            "text/markdown",
+            &[],
+        )
+        .expect("artifact");
+    let results = app
+        .verifier
+        .verify(&task.task_id, &["citations_resolve".into()])
+        .expect("verify");
+    assert_eq!(results[0].verdict, Verdict::Fail);
+    assert_eq!(results[0].diagnostics[0].error_code, "NO_CITATIONS_FOUND");
+}

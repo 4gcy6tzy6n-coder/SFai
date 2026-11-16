@@ -266,10 +266,21 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
                 let task = app
                     .create_task(&goal, constraint, accept, Some(Budget::default()))
                     .map_err(|e| e.to_string())?;
+                let mut adapter = OpenAICompatibleAdapter::from_env();
+                if cli.provider.is_some() || cli.model.is_some() {
+                    let profile = sfai::integrations::providers::profiles::resolve_for_cli(
+                        cli.provider.as_deref(),
+                        cli.model.as_deref(),
+                        cli.price_in,
+                        cli.price_out,
+                    )
+                    .map_err(|e| e.to_string())?;
+                    adapter = OpenAICompatibleAdapter::from_profile(&profile)
+                        .map_err(|e| e.to_string())?;
+                }
                 (
                     task,
-                    Box::new(OpenAICompatibleAdapter::from_env())
-                        as Box<dyn sfai::core::model_adapter::ModelAdapter>,
+                    Box::new(adapter) as Box<dyn sfai::core::model_adapter::ModelAdapter>,
                 )
             } else {
                 return Err(format!(
@@ -315,7 +326,21 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
             eprintln!("[sfai] resumed {task_id} at seq {}", state.last_seq);
             let mut model: Box<dyn sfai::core::model_adapter::ModelAdapter> = match fixture {
                 Some(name) => (get_fixture(&name).map_err(|e| e.to_string())?.build_model)(),
-                None => Box::new(OpenAICompatibleAdapter::from_env()),
+                None => {
+                    let mut adapter = OpenAICompatibleAdapter::from_env();
+                    if cli.provider.is_some() || cli.model.is_some() {
+                        let profile = sfai::integrations::providers::profiles::resolve_for_cli(
+                            cli.provider.as_deref(),
+                            cli.model.as_deref(),
+                            cli.price_in,
+                            cli.price_out,
+                        )
+                        .map_err(|e| e.to_string())?;
+                        adapter = OpenAICompatibleAdapter::from_profile(&profile)
+                            .map_err(|e| e.to_string())?;
+                    }
+                    Box::new(adapter)
+                }
             };
             let result = if cli.ui {
                 let mut observer = ClaudeStepObserver::new(std::io::stdout(), theme);
