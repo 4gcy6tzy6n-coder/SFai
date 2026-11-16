@@ -64,6 +64,30 @@ pub struct TaskRunResult {
     pub steps: usize,
     pub cost: Value,
     pub open_issues: Vec<Value>,
+    /// Routing-quality report (plan §13.4): what the model routed to and how.
+    pub routing: Value,
+}
+
+/// Per-run routing statistics — the router block's own telemetry.
+#[derive(Debug, Clone, Default, serde::Serialize)]
+pub struct RoutingStats {
+    pub intent_kinds: BTreeMap<String, u32>,
+    pub tool_calls: u32,
+    /// Idempotent replays (duplicate intent safely absorbed).
+    pub duplicate_replays: u32,
+    /// Intents refused because the same action repeated without state change.
+    pub loop_guard_trips: u32,
+    /// Requests routed to unknown operations (misroutes).
+    pub misroutes: u32,
+    pub ask_user: u32,
+    pub skill_activations: u32,
+    pub discover_calls: u32,
+}
+
+impl RoutingStats {
+    fn as_value(&self) -> Value {
+        serde_json::to_value(self).unwrap_or(Value::Null)
+    }
 }
 
 impl TaskRunResult {
@@ -75,6 +99,7 @@ impl TaskRunResult {
             steps: 0,
             cost: Value::Null,
             open_issues: Vec::new(),
+            routing: Value::Null,
         }
     }
 
@@ -86,6 +111,7 @@ impl TaskRunResult {
             steps: 0,
             cost: Value::Null,
             open_issues: Vec::new(),
+            routing: Value::Null,
         }
     }
 }
@@ -106,6 +132,9 @@ pub struct DecisionKernel<'a> {
     activated_skills: BTreeMap<String, SkillActivation>,
     cancel_flag: Option<Arc<AtomicBool>>,
     enforce_acceptance: bool,
+    routing: RoutingStats,
+    /// Recent dispatched action signatures (kind + payload hash) for loop detection.
+    action_history: Vec<String>,
 }
 
 impl<'a> DecisionKernel<'a> {
@@ -139,6 +168,8 @@ impl<'a> DecisionKernel<'a> {
             activated_skills: BTreeMap::new(),
             cancel_flag: None,
             enforce_acceptance: true,
+            routing: RoutingStats::default(),
+            action_history: Vec::new(),
         }
     }
 
@@ -223,6 +254,64 @@ impl<'a> DecisionKernel<'a> {
             let mut intent = response.intent.clone();
             // Runtime authority: the model cannot target another task.
             intent.task_id = task_id.to_string();
+            *self
+                .routing
+                .intent_kinds
+                .entry(intent.kind.as_str().to_string())
+                .or_insert(0) += 1;
+            if intent.kind == IntentKind::AskUser {
+                self.routing.ask_user += 1;
+            }
+            if intent.kind == IntentKind::Discover {
+                self.routing.discover_calls += 1;
+            }
+            if intent.payload.get("skill_id").is_some() {
+                self.routing.skill_activations += 1;
+            }
+            // Runtime loop guard (plan §4): the same action repeated while no
+            // state change occurred is refused instead of executed again.
+            let action_sig = if matches!(
+                intent.kind,
+                IntentKind::Execute | IntentKind::Retrieve | IntentKind::Verify
+            ) {
+                Some(crate::ids::canonical_hash(&serde_json::json!([
+                    intent.kind.as_str(),
+                    intent.payload
+                ])))
+            } else {
+                None
+            };
+            if let Some(sig) = &action_sig {
+                let repeated = self.action_history.iter().rev().take(2).all(|h| h == sig)
+                    && self.action_history.len() >= 2;
+                if repeated {
+                    self.routing.loop_guard_trips += 1;
+                    // The model still made a decision; keep the audit trail exact.
+                    self.task_store.record_decision_started(
+                        task_id,
+                        intent.kind.as_str(),
+                        &intent.reason_code,
+                    )?;
+                    let guarded = crate::contracts::ToolResult {
+                        status: crate::contracts::ToolStatus::Denied,
+                        operation_id: Some(format!("{}.*", intent.kind.as_str())),
+                        error_code: Some("LOOP_DETECTED".into()),
+                        diagnostic: Some(json!({
+                            "verdict": "fail",
+                            "error_code": "LOOP_DETECTED",
+                            "repair_hint": "The same action repeated 3x without state change;                                             choose a different action or report blocked.",
+                        })),
+                        ..Default::default()
+                    };
+                    self.tracer.record(
+                        task_id,
+                        "loop_guard",
+                        json!({"kind": intent.kind.as_str(), "occurrence": 3}),
+                    )?;
+                    self.apply_result(task_id, &intent, &guarded)?;
+                    continue;
+                }
+            }
             let mut observed_response = response.clone();
             observed_response.intent = intent.clone();
             observer.on_decision(steps, &observed_response);
@@ -250,6 +339,9 @@ impl<'a> DecisionKernel<'a> {
                         let mut result = result.unwrap();
                         result.steps = steps;
                         result.cost = self.cost_value();
+                        result.routing = self.routing.as_value();
+                        self.tracer
+                            .record(task_id, "routing", self.routing.as_value())?;
                         observer.on_run_end(&result);
                         return Ok(result);
                     }
@@ -268,7 +360,10 @@ impl<'a> DecisionKernel<'a> {
                             crate::contracts::TaskStatus::Blocked,
                             "acceptance criteria still failing",
                         )?;
-                        let mut result = TaskRunResult::blocked(task_id);
+                        let mut result = TaskRunResult {
+                            routing: self.routing.as_value(),
+                            ..TaskRunResult::blocked(task_id)
+                        };
                         result.answer = intent
                             .payload
                             .get("text")
@@ -322,6 +417,18 @@ impl<'a> DecisionKernel<'a> {
                 _ => {
                     let tool_result = self.dispatch(task_id, &intent, &state)?;
                     self.apply_result(task_id, &intent, &tool_result)?;
+                    // Loop history tracks *successful* actions only: a failing
+                    // action is retried under the consecutive-error bound, and a
+                    // successful-but-unproductive repetition is what the loop
+                    // guard exists to stop.
+                    if tool_result.status == crate::contracts::ToolStatus::Ok {
+                        if let Some(sig) = &action_sig {
+                            self.action_history.push(sig.clone());
+                            if self.action_history.len() > 8 {
+                                self.action_history.remove(0);
+                            }
+                        }
+                    }
                     observer.on_tool_result(steps, &intent, &tool_result);
                     if tool_result.status == crate::contracts::ToolStatus::Error {
                         consecutive_tool_errors += 1;
@@ -332,7 +439,10 @@ impl<'a> DecisionKernel<'a> {
                                 crate::contracts::TaskStatus::Blocked,
                                 "tool errors exceeded bounded retry",
                             )?;
-                            let mut result = TaskRunResult::blocked(task_id);
+                            let mut result = TaskRunResult {
+                                routing: self.routing.as_value(),
+                                ..TaskRunResult::blocked(task_id)
+                            };
                             result.open_issues = self.task_store.state(task_id)?.unresolved_errors;
                             result.steps = steps;
                             result.cost = self.cost_value();
@@ -395,6 +505,7 @@ impl<'a> DecisionKernel<'a> {
             steps: 0,
             cost: Value::Null,
             open_issues: Vec::new(),
+            routing: self.routing.as_value(),
         }
     }
 
@@ -704,8 +815,13 @@ impl<'a> DecisionKernel<'a> {
                 "error_code": result.error_code,
             }),
         )?;
-        if !result.replayed {
+        if result.replayed {
+            self.routing.duplicate_replays += 1;
+        } else {
             self.cost.add_tool_call();
+        }
+        if result.error_code.as_deref() == Some("UNKNOWN_OPERATION") {
+            self.routing.misroutes += 1;
         }
         // Meta operations bypass the broker, but their results must reach the
         // ledger so later envelopes can show previews and budgets stay exact.

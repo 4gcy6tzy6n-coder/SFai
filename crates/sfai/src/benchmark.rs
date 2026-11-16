@@ -102,6 +102,11 @@ pub struct BenchTaskResult {
     pub output_tokens: u64,
     pub tool_calls: u64,
     pub cost_usd: f64,
+    pub steps: u64,
+    pub misroutes: u64,
+    pub loop_guard_trips: u64,
+    pub duplicate_replays: u64,
+    pub ask_user: u64,
     /// Populated when the run ended in error (model/provider/runtime failure).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
@@ -131,6 +136,13 @@ pub struct BenchSuiteMetrics {
     pub ci95_cost_usd: f64,
     pub cost_per_success_usd: f64,
     pub tokens_per_success: f64,
+    // Routing quality (plan §13.4).
+    pub mean_steps: f64,
+    pub mean_tool_calls: f64,
+    pub misroutes: u64,
+    pub loop_guard_trips: u64,
+    pub duplicate_replays: u64,
+    pub ask_user_rate: f64,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -189,6 +201,22 @@ impl BenchReport {
                 m.mean_cost_usd,
                 m.ci95_cost_usd,
                 m.cost_per_success_usd
+            ));
+        }
+        out.push_str("\n## Routing quality\n\n");
+        out.push_str("| suite | ablation | steps | tool calls | misroutes | loop-guard | dup replays | ask_user rate |\n");
+        out.push_str("|---|---|---|---|---|---|---|---|\n");
+        for m in &self.metrics {
+            out.push_str(&format!(
+                "| {} | {} | {:.1} | {:.1} | {} | {} | {} | {:.2} |\n",
+                m.suite,
+                m.ablation,
+                m.mean_steps,
+                m.mean_tool_calls,
+                m.misroutes,
+                m.loop_guard_trips,
+                m.duplicate_replays,
+                m.ask_user_rate
             ));
         }
         out.push_str("\n## Notes\n\n");
@@ -672,6 +700,11 @@ pub fn run_benchmark_full(
                         );
                     }
                     let num = |key: &str| cost.get(key).and_then(|v| v.as_u64()).unwrap_or(0);
+                    let routing = result
+                        .as_ref()
+                        .map(|r| r.routing.clone())
+                        .unwrap_or(Value::Null);
+                    let rnum = |key: &str| routing.get(key).and_then(|v| v.as_u64()).unwrap_or(0);
                     tasks.push(BenchTaskResult {
                         task_id: task.task_id.clone(),
                         spec_id: spec.id.clone(),
@@ -688,6 +721,15 @@ pub fn run_benchmark_full(
                         output_tokens: num("output_tokens"),
                         tool_calls: num("tool_calls"),
                         cost_usd: cost.get("cost_usd").and_then(|v| v.as_f64()).unwrap_or(0.0),
+                        steps: routing
+                            .get("intent_kinds")
+                            .and_then(|k| k.as_object())
+                            .map(|o| o.values().filter_map(|v| v.as_u64()).sum())
+                            .unwrap_or(0),
+                        misroutes: rnum("misroutes"),
+                        loop_guard_trips: rnum("loop_guard_trips"),
+                        duplicate_replays: rnum("duplicate_replays"),
+                        ask_user: rnum("ask_user"),
                         error,
                     });
                 }
@@ -752,6 +794,12 @@ pub fn run_benchmark_full(
             } else {
                 0.0
             },
+            mean_steps: group.iter().map(|t| t.steps as f64).sum::<f64>() / n,
+            mean_tool_calls: group.iter().map(|t| t.tool_calls as f64).sum::<f64>() / n,
+            misroutes: group.iter().map(|t| t.misroutes).sum(),
+            loop_guard_trips: group.iter().map(|t| t.loop_guard_trips).sum(),
+            duplicate_replays: group.iter().map(|t| t.duplicate_replays).sum(),
+            ask_user_rate: group.iter().filter(|t| t.ask_user > 0).count() as f64 / n,
         });
     }
 
