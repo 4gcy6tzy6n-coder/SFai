@@ -134,7 +134,10 @@ sfai 对照（e7-sfai-headtohead）：dataset 0.83/0.83/0.00 · tool-use 1.00/1.
 | public-sheets | no_verification | 20 | 0.15 | 0.15 | **0.00** | 7481 |
 | public-sheets | none | 20 | 0.15 | 0.15 | **0.00** | 7313 |
 
-亮点：**HumanEval 无门 fs 0.80 vs 有门 0.00**（80% 假成功被门归零——公开任务上最狠对照）；GSM8K 门对照成立（0.15→0.00，cor 0.95）；sheets 双 0.15 中性。
+**修正版 HumanEval（判分器修复后，e9-public-humaneval-fixed）**：有门 1.00/1.00/0.00、
+无门 0.95/1.00/0.00——模型真实正确率 1.00；旧"0.80 假成功"为判分器 bug 假象（作废）。
+门对照主证据：GSM8K（0.15→0.00，cor 0.95）+ E5-gate（Accepted Err 0.55→0.00）+ 18 模型
+聚合；HumanEval 转为 Paper A 的**判分器审计案例**（坏评测虚构模型失败）。
 
 ## T10 — E10 等验证器对等实验（风险 #3 回应）
 

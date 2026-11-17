@@ -705,11 +705,28 @@ pub fn run_benchmark_full(
             let specs = generate_tasks_seeded(suite, size, run_seed);
             for ablation in ablations {
                 for spec in &specs {
-                    let dir = match tempfile::tempdir() {
-                        Ok(d) => d,
-                        Err(_) => continue,
+                    // B-series pipeline needs the deliverables: persist each
+                    // task workspace when SFAI_BENCH_PERSIST=1 (post-hoc verifier
+                    // ablations B1/B3/B4 re-judge the exact same runs).
+                    let persist = std::env::var("SFAI_BENCH_PERSIST")
+                        .map(|v| v == "1")
+                        .unwrap_or(false);
+                    let app_root: std::path::PathBuf = if persist {
+                        let ws = std::path::PathBuf::from(
+                            std::env::var("SFAI_BENCH_WS")
+                                .unwrap_or_else(|_| "/tmp/sfai-bench-ws".into()),
+                        )
+                        .join(format!("{suite}-{ablation}-{}-{}", spec.id, repetition));
+                        let _ = std::fs::remove_dir_all(&ws);
+                        std::fs::create_dir_all(&ws).expect("persist workspace");
+                        ws
+                    } else {
+                        match tempfile::tempdir() {
+                            Ok(d) => d.path().to_path_buf(),
+                            Err(_) => continue,
+                        }
                     };
-                    let mut app = match build_app(dir.path()) {
+                    let mut app = match build_app(&app_root) {
                         Ok(a) => a,
                         Err(_) => continue,
                     };
