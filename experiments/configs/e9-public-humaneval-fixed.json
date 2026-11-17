@@ -1,0 +1,18 @@
+{
+  "name": "e9-public-humaneval-fixed",
+  "provider": "bailian",
+  "model": "deepseek-v4.1-flash",
+  "price_in": 0.0,
+  "price_out": 0.0,
+  "suites": [
+    "public-humaneval"
+  ],
+  "ablations": [
+    "none",
+    "no_verification"
+  ],
+  "size": 20,
+  "repetitions": 1,
+  "seed": 0,
+  "note": "CORRECTED rerun after P0 verifier fixes (materialization + protected tests + import fix); voids all prior HumanEval numbers"
+}
