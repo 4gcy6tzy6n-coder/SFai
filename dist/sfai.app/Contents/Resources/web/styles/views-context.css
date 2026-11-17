@@ -1,0 +1,213 @@
+/* Context */
+
+.context-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 22rem) minmax(0, 1fr);
+  height: clamp(26rem, calc(100dvh - 13rem), 48rem);
+  margin-top: var(--space-5);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.context-list-pane {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  border-right: 1px solid var(--line);
+}
+
+.context-search {
+  flex: none;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.context-search .field-label {
+  margin-bottom: var(--space-2);
+  color: var(--faint);
+}
+
+.context-search-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.context-search-row .input-wrap {
+  flex: 1;
+}
+
+.context-count {
+  flex: none;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  white-space: nowrap;
+}
+
+.context-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.context-result {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: var(--space-3);
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+
+.context-result:hover {
+  background: var(--surface-2);
+}
+
+.context-result.is-selected {
+  background: var(--surface-2);
+}
+
+.context-result-title {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-result-path {
+  overflow: hidden;
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  line-height: 1.45;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.context-result-summary {
+  display: -webkit-box;
+  margin-top: 0.15rem;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.context-result-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: 0.1rem;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+}
+
+.context-preview {
+  min-width: 0;
+  min-height: 0;
+  padding: var(--space-5);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.preview-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.preview-title {
+  margin-top: var(--space-1);
+  font-size: var(--text-lg);
+  line-height: 1.35;
+  text-wrap: balance;
+}
+
+.preview-path {
+  margin-top: var(--space-1);
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+  overflow-wrap: anywhere;
+}
+
+.preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.preview-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.5625rem;
+}
+
+.preview-excerpt {
+  margin-top: var(--space-5);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.preview-excerpt p {
+  max-width: 70ch;
+  margin-top: var(--space-2);
+  color: var(--ink-2);
+  font-size: var(--text-base);
+  line-height: 1.8;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.preview-provenance {
+  margin-top: var(--space-5);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.6875rem;
+  line-height: 1.6;
+}
+
+.preview-provenance code {
+  font-size: 0.625rem;
+}
+
+.context-empty,
+.cap-empty,
+.trace-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 14rem;
+  padding: var(--space-8) var(--space-4);
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  text-align: center;
+}
+

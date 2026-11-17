@@ -92,9 +92,27 @@ pub async fn serve(
     token: Option<String>,
     provider: Option<ProviderProfile>,
 ) -> std::io::Result<()> {
+    serve_with_web(app, addr, token, provider, None).await
+}
+
+/// Serve API + (optionally) the static frontend at `/` — the desktop app
+/// window loads this URL so one process backs the GUI with the real engine.
+pub async fn serve_with_web(
+    app: Arc<App>,
+    addr: std::net::SocketAddr,
+    token: Option<String>,
+    provider: Option<ProviderProfile>,
+    web_dir: Option<std::path::PathBuf>,
+) -> std::io::Result<()> {
     let state = Arc::new(ServerState::new(app, token, provider));
+    let mut svc = router(state);
+    if let Some(dir) = web_dir {
+        let files = tower_http::services::ServeDir::new(dir)
+            .append_index_html_on_directories(true);
+        svc = svc.fallback_service(files);
+    }
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, router(state)).await
+    axum::serve(listener, svc).await
 }
 
 // ---- middleware ----

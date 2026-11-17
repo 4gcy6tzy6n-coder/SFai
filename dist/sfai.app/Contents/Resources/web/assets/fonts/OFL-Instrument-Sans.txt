@@ -1,0 +1,8 @@
+Instrument Sans
+Copyright 2022 The Instrument Sans Project Authors (https://github.com/Instrument/instrument-sans)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The full license text is included in this directory as OFL-1.1.txt.
+
+The font file instrument-sans-latin.woff2 is an unmodified webfont build
+served by Google Fonts for the Instrument Sans project.

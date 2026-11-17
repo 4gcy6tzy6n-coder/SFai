@@ -185,6 +185,9 @@ enum Cmd {
         /// TCP port (default 8765)
         #[arg(long, default_value_t = 8765)]
         port: u16,
+        /// Serve a static frontend directory at / (desktop app mode)
+        #[arg(long)]
+        web: Option<PathBuf>,
         /// Bind address (loopback only by default)
         #[arg(long, default_value = "127.0.0.1")]
         bind: String,
@@ -926,7 +929,7 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
             }
             Ok(0)
         }
-        Cmd::Serve { port, bind } => {
+        Cmd::Serve { port, bind, web } => {
             let addr: std::net::SocketAddr = format!("{bind}:{port}")
                 .parse()
                 .map_err(|e| format!("invalid bind address {bind}:{port}: {e}"))?;
@@ -951,11 +954,12 @@ fn dispatch(cli: Cli) -> Result<u8, String> {
                 .enable_all()
                 .build()
                 .map_err(|e| e.to_string())?
-                .block_on(sfai::server::serve(
+                .block_on(sfai::server::serve_with_web(
                     app,
                     addr,
                     std::env::var("SFAI_API_TOKEN").ok(),
                     profile,
+                    web,
                 ))
                 .map_err(|e| e.to_string())?;
             Ok(0)

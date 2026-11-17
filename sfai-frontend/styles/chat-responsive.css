@@ -1,0 +1,175 @@
+@media (max-width: 960px) {
+  .chat-app {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .session-rail {
+    position: fixed;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    width: min(19rem, 88vw);
+    transform: translateX(-100%);
+    transition: transform var(--dur-3) var(--ease-out);
+  }
+
+  .chat-app.rail-open .session-rail {
+    transform: translateX(0);
+  }
+
+  .rail-close,
+  .rail-toggle {
+    display: grid;
+  }
+
+  .rail-scrim {
+    z-index: 35;
+  }
+
+  .chat-topbar,
+  .composer-dock {
+    padding-inline: var(--space-4);
+  }
+}
+
+@media (max-width: 720px) {
+  .chat-topbar {
+    height: 3.25rem;
+    padding-inline: var(--space-4);
+    gap: var(--space-1);
+  }
+
+  .model-chip {
+    display: none;
+  }
+
+  .chat-title-row h1 {
+    font-size: 0.9375rem;
+  }
+
+  .chat-actions {
+    gap: 0;
+  }
+
+  .chat-sub {
+    max-width: 46vw;
+  }
+
+  .chat-column {
+    padding: var(--space-5) var(--space-4) var(--space-6);
+  }
+
+  .chat-topbar,
+  .composer-dock {
+    padding-inline: var(--space-4);
+  }
+
+  .composer-dock {
+    padding-top: var(--space-2);
+    padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom));
+  }
+
+  .chat-user {
+    margin: var(--space-6) 0 var(--space-5);
+  }
+
+  .chat-user-text {
+    max-width: 92%;
+  }
+
+  .chat-assistant-thread {
+    margin-left: 0.5rem;
+    padding-left: var(--space-4);
+  }
+
+  .chat-empty {
+    margin-top: 7vh;
+  }
+
+  .chat-empty h2 {
+    font-size: 1.375rem;
+  }
+
+  .chat-empty-sub {
+    font-size: 0.8125rem;
+  }
+
+  .composer-label span:last-child {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .chat-title-row h1 {
+    font-size: 0.875rem;
+  }
+
+  #chat-status {
+    display: none;
+  }
+
+  .chat-session-meta {
+    font-size: 0.5625rem;
+  }
+
+  .chat-session-meta .mono {
+    font-size: 0.5625rem;
+  }
+
+  .chat-user-text {
+    padding: var(--space-2) var(--space-3);
+  }
+
+  .chat-assistant-head {
+    flex-wrap: wrap;
+  }
+
+  .chat-step-text {
+    font-size: 1rem;
+  }
+
+  .chat-tail {
+    font-size: 0.5rem;
+  }
+}
+
+@media (max-width: 960px) {
+  .task-item {
+    min-height: 2.75rem;
+  }
+
+  .chat-suggestion {
+    min-height: 2.75rem;
+  }
+
+  .brand-btn {
+    min-height: 2.75rem;
+  }
+}
+
+/* Scope the legacy task title styles away from the session rail. */
+
+.session-rail .task-title {
+  max-width: none;
+  margin-top: 0;
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 960px) {
+  .rail-head {
+    height: calc(4rem + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .rail-foot {
+    padding-bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 720px) {
+  .chat-topbar {
+    height: calc(3.25rem + env(safe-area-inset-top));
+    padding-top: env(safe-area-inset-top);
+  }
+}

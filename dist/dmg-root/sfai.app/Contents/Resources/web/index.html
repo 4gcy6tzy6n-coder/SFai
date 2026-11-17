@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light" data-motion="system">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>sfai · 对话</title>
+  <meta name="description" content="sfai 是一个模型原生的 Agent 对话工作台：目标、决策、工具执行、审批与核验都留在同一段会话里。">
+  <meta name="theme-color" content="#f5f6f7">
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <script>
+    (function () {
+      try {
+        var raw = localStorage.getItem("sfai.console.v2");
+        var pref = raw ? (JSON.parse(raw).settings || {}).theme : "system";
+        var dark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+        document.documentElement.dataset.theme = pref === "dark" || (pref !== "light" && dark) ? "dark" : "light";
+      } catch (error) {
+        document.documentElement.dataset.theme = "light";
+      }
+    })();
+  </script>
+  <link rel="stylesheet" href="styles/tokens.css">
+  <link rel="stylesheet" href="styles/base.css">
+  <link rel="stylesheet" href="styles/overlays.css">
+  <link rel="stylesheet" href="styles/page.css">
+  <link rel="stylesheet" href="styles/views-tasks.css">
+  <link rel="stylesheet" href="styles/views-trajectory.css">
+  <link rel="stylesheet" href="styles/views-context.css">
+  <link rel="stylesheet" href="styles/views-capabilities.css">
+  <link rel="stylesheet" href="styles/views-responsive.css">
+  <link rel="stylesheet" href="styles/palette.css">
+  <link rel="stylesheet" href="styles/settings.css">
+  <link rel="stylesheet" href="styles/settings-controls.css">
+  <link rel="stylesheet" href="styles/settings-responsive.css">
+  <link rel="stylesheet" href="styles/chat.css">
+  <link rel="stylesheet" href="styles/composer.css">
+  <link rel="stylesheet" href="styles/chat-responsive.css">
+</head>
+<body>
+  <a class="skip-link" href="#main">跳到对话</a>
+
+  <div class="chat-app" id="app">
+    <aside class="session-rail" id="session-rail" aria-label="会话">
+      <div class="rail-head">
+        <button class="brand-btn" type="button" data-action="focus-composer" aria-label="sfai 对话">
+          <span class="brand-mark" data-icon-slot="brand" aria-hidden="true"></span>
+          <span class="brand-word">sfai</span>
+          <span class="brand-ver mono">0.5</span>
+        </button>
+        <button class="icon-btn rail-close" type="button" data-action="close-rail" aria-label="关闭会话栏">
+          <span data-icon-slot="close" aria-hidden="true"></span>
+        </button>
+      </div>
+
+      <div class="rail-body">
+        <button class="btn btn--primary new-chat" type="button" data-action="open-new-chat">
+          <span data-icon-slot="plus" aria-hidden="true"></span>
+          <span>新对话</span>
+          <kbd class="kbd">N</kbd>
+        </button>
+
+        <div class="rail-search">
+          <label class="field-label" for="task-search">搜索会话</label>
+          <div class="input-wrap input-wrap--search">
+            <span class="input-icon" data-icon-slot="search" aria-hidden="true"></span>
+            <input id="task-search" type="search" placeholder="标题、ID 或目标" autocomplete="off" spellcheck="false">
+          </div>
+        </div>
+
+        <div class="rail-list-head">
+          <span class="eyebrow">CONVERSATIONS</span>
+          <span class="mono rail-count" id="rail-count">0</span>
+        </div>
+        <div class="rail-list" id="session-list" aria-live="polite"></div>
+      </div>
+
+      <div class="rail-foot">
+        <div class="rail-runtime">
+          <span class="dot dot--warn" aria-hidden="true"></span>
+          <span>本地演示</span>
+          <span class="mono">未连接运行时</span>
+        </div>
+        <button class="icon-btn" type="button" data-action="open-settings" data-tab="run" aria-label="设置">
+          <span data-icon-slot="settings" aria-hidden="true"></span>
+        </button>
+      </div>
+    </aside>
+
+    <div class="rail-scrim" id="rail-scrim" hidden></div>
+
+    <div class="chat-main">
+      <header class="chat-topbar">
+        <button class="icon-btn rail-toggle" type="button" data-action="toggle-rail" aria-label="打开会话栏">
+          <span data-icon-slot="menu" aria-hidden="true"></span>
+        </button>
+        <div class="chat-title-block">
+          <div class="chat-title-row">
+            <h1 id="chat-title">对话</h1>
+            <span id="chat-status"></span>
+          </div>
+          <p class="chat-sub mono" id="chat-sub"></p>
+        </div>
+        <div class="chat-actions">
+          <button class="icon-btn" type="button" data-action="open-palette" aria-label="命令搜索">
+            <span data-icon-slot="search" aria-hidden="true"></span>
+          </button>
+          <button class="chip-btn model-chip" type="button" data-action="open-settings" data-tab="run" id="model-chip" aria-label="模型与运行设置">
+            <span class="model-dot" aria-hidden="true"></span>
+            <span class="model-name mono">deepseek-chat</span>
+            <span class="chip-chevron" data-icon-slot="chevron-down" aria-hidden="true"></span>
+          </button>
+          <button class="icon-btn" type="button" data-action="open-settings" data-tab="run" id="settings-trigger" aria-label="设置与运行详情">
+            <span data-icon-slot="settings" aria-hidden="true"></span>
+          </button>
+        </div>
+      </header>
+
+      <main class="chat-scroll" id="main" tabindex="-1" aria-label="对话内容"></main>
+
+      <div class="composer-dock">
+        <div class="composer-column">
+          <label class="composer-label" for="composer-input">
+            <span>继续对话</span>
+            <span id="composer-hint">Enter 换行 · ⌘↵ 发送</span>
+          </label>
+          <form class="chat-composer" id="composer-form" data-task-id="">
+            <textarea id="composer-input" name="message" rows="1" placeholder="描述下一步，或补充一条约束…"></textarea>
+            <div class="chat-composer-bar">
+              <span class="composer-note" id="composer-note">演示模式 · 不会调用真实模型</span>
+              <button class="btn btn--primary btn--sm composer-send" type="submit">
+                <span data-icon-slot="send" aria-hidden="true"></span>
+                <span>发送</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="sr-only" id="live-status" role="status" aria-live="polite"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" hidden></div>
+
+  <dialog class="settings-sheet" id="settings-dialog" aria-labelledby="settings-title">
+    <div class="settings-shell">
+      <header class="settings-head">
+        <div>
+          <p class="eyebrow">WORKSPACE</p>
+          <h1 id="settings-title">设置与运行详情</h1>
+        </div>
+        <div class="settings-head-actions">
+          <span class="settings-task-label mono" id="settings-task-label"></span>
+          <button class="btn btn--sm settings-back" type="button" data-action="close-settings">返回对话</button>
+          <button class="icon-btn" type="button" data-close-dialog="settings-dialog" aria-label="关闭设置">
+            <span data-icon-slot="close" aria-hidden="true"></span>
+          </button>
+        </div>
+      </header>
+
+      <div class="settings-layout">
+        <nav class="settings-nav" role="tablist" aria-label="设置页签">
+          <button class="settings-tab" type="button" role="tab" id="settings-tab-task" aria-controls="settings-body" aria-selected="true" data-action="settings-tab" data-tab="task">
+            <span data-icon-slot="tasks" aria-hidden="true"></span><span>任务</span>
+          </button>
+          <button class="settings-tab" type="button" role="tab" id="settings-tab-trajectory" aria-controls="settings-body" aria-selected="false" data-action="settings-tab" data-tab="trajectory">
+            <span data-icon-slot="trajectory" aria-hidden="true"></span><span>轨迹</span>
+          </button>
+          <button class="settings-tab" type="button" role="tab" id="settings-tab-context" aria-controls="settings-body" aria-selected="false" data-action="settings-tab" data-tab="context">
+            <span data-icon-slot="context" aria-hidden="true"></span><span>上下文</span>
+          </button>
+          <button class="settings-tab" type="button" role="tab" id="settings-tab-capabilities" aria-controls="settings-body" aria-selected="false" data-action="settings-tab" data-tab="capabilities">
+            <span data-icon-slot="capabilities" aria-hidden="true"></span><span>能力</span>
+          </button>
+          <button class="settings-tab" type="button" role="tab" id="settings-tab-run" aria-controls="settings-body" aria-selected="false" data-action="settings-tab" data-tab="run">
+            <span data-icon-slot="settings" aria-hidden="true"></span><span>设置</span>
+          </button>
+        </nav>
+        <section class="settings-body" id="settings-body" role="tabpanel" aria-labelledby="settings-tab-task"></section>
+      </div>
+
+      <footer class="settings-foot">
+        <span>本地演示 · 未连接运行时</span>
+        <span class="mono">sfai 0.5.0</span>
+      </footer>
+    </div>
+  </dialog>
+
+  <dialog class="dialog new-chat-dialog" id="new-chat-dialog" aria-labelledby="new-chat-title">
+    <form class="dialog-form" id="new-chat-form" novalidate>
+      <header class="dialog-head">
+        <div>
+          <p class="eyebrow">NEW CONVERSATION</p>
+          <h2 id="new-chat-title">新对话</h2>
+        </div>
+        <button class="icon-btn" type="button" data-close-dialog="new-chat-dialog" aria-label="关闭">
+          <span data-icon-slot="close" aria-hidden="true"></span>
+        </button>
+      </header>
+      <div class="form-body">
+        <div class="field">
+          <label class="field-label" for="new-chat-goal">你想让 sfai 做什么？ <span class="required">必填</span></label>
+          <textarea id="new-chat-goal" name="goal" rows="3" placeholder="写下要完成的结果，以及为什么重要。" aria-describedby="new-chat-goal-hint new-chat-goal-error"></textarea>
+          <p class="field-hint" id="new-chat-goal-hint">目标会固定在这次会话里，不随检索淘汰。</p>
+          <p class="field-error" id="new-chat-goal-error" hidden></p>
+        </div>
+
+        <details class="new-chat-advanced">
+          <summary>高级设置</summary>
+          <div class="advanced-fields">
+            <div class="field">
+              <label class="field-label" for="new-chat-constraints">约束 <span class="field-optional">逗号分隔</span></label>
+              <input id="new-chat-constraints" name="constraints" type="text" placeholder="例如：不得放宽验收规则，外部写入需要审批">
+            </div>
+            <div class="field">
+              <label class="field-label" for="new-chat-acceptance">验收规则 <span class="field-optional">逗号分隔</span></label>
+              <input id="new-chat-acceptance" name="acceptance" type="text" placeholder="例如：cargo test 全绿，回放状态一致">
+            </div>
+            <div class="form-grid">
+              <div class="field">
+                <label class="field-label" for="new-chat-model">模型</label>
+                <select id="new-chat-model" name="model">
+                  <option value="deepseek-chat">deepseek-chat</option>
+                  <option value="deepseek-reasoner">deepseek-reasoner</option>
+                  <option value="local-openai">local · OpenAI compatible</option>
+                </select>
+              </div>
+              <div class="field">
+                <label class="field-label" for="new-chat-budget">预算上限（元）</label>
+                <input id="new-chat-budget" name="budget" type="number" min="0.1" step="0.1" value="5">
+              </div>
+            </div>
+          </div>
+        </details>
+      </div>
+      <footer class="dialog-foot">
+        <p class="dialog-note">演示模式：会话写入本地状态，不会调用真实模型。</p>
+        <div class="dialog-actions">
+          <button class="btn" type="button" data-close-dialog="new-chat-dialog">取消</button>
+          <button class="btn btn--primary" type="submit">开始对话</button>
+        </div>
+      </footer>
+    </form>
+  </dialog>
+
+  <dialog class="palette-dialog" id="palette-dialog" aria-labelledby="palette-title">
+    <div class="palette">
+      <h2 class="sr-only" id="palette-title">命令搜索</h2>
+      <div class="palette-input-wrap">
+        <span data-icon-slot="search" aria-hidden="true"></span>
+        <label class="palette-prefix" for="palette-input">命令</label>
+        <input id="palette-input" type="text" placeholder="搜索命令、设置或会话" autocomplete="off" spellcheck="false" aria-controls="palette-list" aria-autocomplete="list">
+        <kbd class="kbd">esc</kbd>
+      </div>
+      <div class="palette-list" id="palette-list" role="listbox" aria-label="命令"></div>
+      <footer class="palette-foot">
+        <span><kbd class="kbd">↑</kbd><kbd class="kbd">↓</kbd> 选择</span>
+        <span><kbd class="kbd">↵</kbd> 执行</span>
+        <span><kbd class="kbd">esc</kbd> 关闭</span>
+      </footer>
+    </div>
+  </dialog>
+
+  <noscript>
+    <div class="noscript">sfai 对话需要 JavaScript 才能加载会话与事件账本。请启用后重新打开。</div>
+  </noscript>
+
+  <script src="js/data.js"></script>
+  <script src="js/icons.js"></script>
+  <script src="js/util.js"></script>
+  <script src="js/store.js"></script>
+  <script src="js/views-tasks.js"></script>
+  <script src="js/views-trajectory.js"></script>
+  <script src="js/views-context.js"></script>
+  <script src="js/views-capabilities.js"></script>
+  <script src="js/views-chat.js"></script>
+  <script src="js/views-settings.js"></script>
+  <script src="js/palette.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

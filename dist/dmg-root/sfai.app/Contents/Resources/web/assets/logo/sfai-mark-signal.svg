@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="sfai-mark-signal-title">
+  <title id="sfai-mark-signal-title">sfai</title>
+  <g fill="none" stroke="#2F54D0" stroke-width="2.2" stroke-linecap="round">
+    <path d="M6 6c4.5 0 7.5 2.5 12 6"/>
+    <path d="M6 18c4.5 0 7.5-2.5 12-6"/>
+  </g>
+  <circle cx="6" cy="6" r="2.1" fill="#2F54D0"/>
+  <circle cx="6" cy="18" r="2.1" fill="#2F54D0"/>
+  <circle cx="18" cy="12" r="2.5" fill="#2F54D0"/>
+</svg>

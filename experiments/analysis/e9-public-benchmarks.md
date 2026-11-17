@@ -1,6 +1,9 @@
 # E9 — 公开基准迁移结果（GSM8K / HumanEval，deepseek-chat）
 
-**日期:** 2026-11-17 · **数据:** `e9-public-deepseek.json` + `e9-public-humaneval-rerun.json`
+**日期:** 2026-11-17 · **数据:** `e9-public-deepseek.json`（GSM8K，deepseek-chat）+
+`e9-public-humaneval-bailian.json` / `e9-public-sheets-bailian.json`
+（HumanEval + sheets，**百炼 deepseek-v4.1-flash**——按项目主要求，后续实验停用
+DeepSeek 官网、改用百炼 DeepSeek Flash）
 **意义:** NeurIPS D&B"公开/可扩展任务集"硬要求达成（GSM8K[MIT]、HumanEval[MIT] 真实子集）。
 
 ## GSM8K（20 题整数答案子集，数据干净）
@@ -21,7 +24,13 @@
   error 字段，零隐瞒）；
 - **任务集本身已交付**（20 题 + 官方测试随仓冻结）：`code_tests_pass`（测试即独立
   裁判）是 acceptance 型正确性，模型无法自评蒙混——网络恢复后重跑即得数。
-- 复现入口已就绪：`bench --config experiments/configs/deepseek-e9-humaneval-rerun.json`。
+- **改用百炼 deepseek-v4.1-flash 重测**（配置 `e9-public-humaneval-bailian.json`），
+  数字以百炼运行为准。
+## public-sheets（SpreadsheetBench 迁移，20 题单值答案）
+
+- 真实 SpreadsheetBench verified_400（NeurIPS'24, CC-BY-SA-4.0）init/golden 对转换：
+  xlsx→CSV 工作区文件、golden 单元格值为 ground truth；
+- 测量：百炼 deepseek-v4.1-flash（`e9-public-sheets-bailian.json`）。
 
 ## 路由遥测（意外收获）
 

@@ -1,0 +1,229 @@
+@media (max-width: 720px) {
+  .settings-sheet {
+    width: 100vw;
+    height: 100dvh;
+    max-width: none;
+    max-height: none;
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .settings-head {
+    padding: calc(var(--space-4) + env(safe-area-inset-top)) var(--space-4) var(--space-4);
+  }
+
+  .settings-head h1 {
+    font-size: var(--text-md);
+  }
+
+  .settings-head-actions {
+    padding-top: 0;
+  }
+
+  .settings-task-label {
+    display: none;
+  }
+
+  .settings-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settings-nav {
+    flex-direction: row;
+    gap: var(--space-1);
+    padding: var(--space-2) var(--space-3);
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    overflow-x: auto;
+  }
+
+  .settings-tab {
+    width: auto;
+    min-width: max-content;
+    min-height: 2.75rem;
+    padding: 0 var(--space-3);
+    white-space: nowrap;
+  }
+
+  .settings-body {
+    padding: var(--space-4) var(--space-4) calc(var(--space-6) + env(safe-area-inset-bottom));
+  }
+
+  .settings-foot {
+    display: none;
+  }
+
+  .settings-pane-head {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .settings-pane-actions {
+    width: 100%;
+  }
+
+  .settings-pane-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .settings-stat-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-stat {
+    border-bottom: 1px solid var(--line);
+  }
+
+  .settings-stat:nth-child(2) {
+    border-right: 0;
+  }
+
+  .settings-stat:nth-child(3),
+  .settings-stat:nth-child(4) {
+    border-bottom: 0;
+  }
+
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-card--wide {
+    grid-column: auto;
+  }
+
+  .settings-approval-note {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .settings-approval-note .btn {
+    width: 100%;
+  }
+
+  .settings-form-foot,
+  .settings-reset-zone {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .settings-form-foot .btn,
+  .settings-reset-zone .btn {
+    width: 100%;
+  }
+
+  .settings-pane--embed .context-layout,
+  .settings-pane--embed .cap-layout {
+    height: auto;
+  }
+
+  .settings-pane--embed .page {
+    padding: 0;
+  }
+
+  .settings-pane--embed .page-head h2 {
+    font-size: var(--text-md);
+  }
+}
+
+@media (max-width: 480px) {
+  .settings-stat-row {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-stat {
+    border-right: 0;
+  }
+
+  .settings-stat:nth-child(3) {
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 960px) {
+  .task-item {
+    min-height: 2.75rem;
+  }
+
+  .chat-suggestion {
+    min-height: 2.75rem;
+  }
+
+  .brand-btn {
+    min-height: 2.75rem;
+  }
+}
+
+@media (max-width: 720px) {
+  .settings-sheet {
+    inset: 0;
+  }
+}
+
+@media (max-width: 1000px) {
+  .settings-pane--embed .context-layout,
+  .settings-pane--embed .cap-layout {
+    grid-template-columns: 1fr;
+    height: auto;
+  }
+
+  .settings-pane--embed .context-list-pane,
+  .settings-pane--embed .cap-list-pane {
+    max-height: 24rem;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+  }
+}
+
+@media (max-width: 900px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .settings-card--wide {
+    grid-column: auto;
+  }
+}
+
+@media (max-width: 900px) {
+  .settings-pane-head {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+
+  .settings-pane-actions {
+    width: 100%;
+  }
+
+  .settings-pane-actions .btn {
+    flex: 1 1 auto;
+  }
+
+  .settings-pane--embed .page-head {
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+}
+
+@media (max-width: 720px) {
+  .settings-back {
+    display: none;
+  }
+
+  .settings-form-foot {
+    bottom: env(safe-area-inset-bottom);
+  }
+
+  .settings-activity-row {
+    grid-template-columns: 3.25rem 4.75rem minmax(0, 1fr);
+  }
+
+  .settings-switch {
+    align-items: flex-start;
+  }
+
+  .settings-switch-control {
+    margin-top: 0.25rem;
+  }
+}
