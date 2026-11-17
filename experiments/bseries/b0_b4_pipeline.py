@@ -49,6 +49,31 @@ def llm_judge(prompt: str, model: str) -> str:
         return f"JUDGE_ERROR: {e}"
 
 
+def materialize_from_store(app_root: Path, out: Path) -> Path:
+    """Deliverables live in the app's object store (sfai.sqlite3 + blobs/),
+    not as flat files. Materialize them for post-hoc judging (P0-style fix)."""
+    import sqlite3
+    out.mkdir(parents=True, exist_ok=True)
+    db = app_root / "sfai.sqlite3"
+    if not db.exists():
+        return out
+    conn = sqlite3.connect(db)
+    try:
+        rows = conn.execute("SELECT path, checksum FROM artifacts").fetchall()
+    finally:
+        conn.close()
+    for path, checksum in rows:
+        blob = app_root / "blobs" / checksum[:2] / checksum
+        if not blob.exists():
+            blob = app_root / "blobs" / checksum
+        if not blob.exists():
+            continue
+        dest = out / path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(blob.read_bytes())
+    return out
+
+
 def check_acceptance(rules, ws: Path):
     """Deterministic gate — same semantics as sfai verify engine (B1)."""
     for rule in rules:
@@ -142,11 +167,15 @@ def main():
         spec = tasks.get(t["spec_id"], {})
         rules = spec.get("acceptance_rules", [])
         ws = ws_root / f"{t['suite']}-no_verification-{t['spec_id']}-{t['repetition']}"
+        # materialize deliverables from the object store into the judge dir
+        judge_dir = Path("/tmp/bseries-judge") / t["task_id"]
+        if ws.exists():
+            judge_dir = materialize_from_store(ws, judge_dir)
         y = bool(t["correct"])
         c = bool(t.get("claimed", t["status"] == "completed"))
-        b1 = check_acceptance(rules, ws) if ws.exists() and rules else False
-        b3 = judge_verdict(rules, ws, args.model, "self") if ws.exists() and rules and KEY else None
-        b4 = judge_verdict(rules, ws, args.model, "judge") if ws.exists() and rules and KEY else None
+        b1 = check_acceptance(rules, judge_dir) if ws.exists() and rules else False
+        b3 = judge_verdict(rules, judge_dir, args.model, "self") if ws.exists() and rules and KEY else None
+        b4 = judge_verdict(rules, judge_dir, args.model, "judge") if ws.exists() and rules and KEY else None
         rows.append({"spec": t["spec_id"], "Y": y, "C": c, "B1": b1, "B3": b3, "B4": b4})
 
     def arm_metrics(verdicts, name, claims):
