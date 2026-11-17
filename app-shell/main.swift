@@ -13,7 +13,14 @@ let baseURL = URL(string: "http://127.0.0.1:\(port)/")!
 // ---- start the real backend ----
 let child = Process()
 child.executableURL = backendBin
-child.arguments = ["serve", "--web", webDir.path, "--port", String(port)]
+// Finder launches have cwd="/" — storage must be an absolute app-data path.
+let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    .appendingPathComponent("sfai", isDirectory: true)
+try? FileManager.default.createDirectory(at: appSupport, withIntermediateDirectories: true)
+child.arguments = [
+    "serve", "--web", webDir.path, "--port", String(port),
+    "--storage", appSupport.path,
+]
 // Provider keys: GUI launches have a minimal environment; merge ~/.sfai/env if present.
 var env = ProcessInfo.processInfo.environment
 if let extra = try? String(contentsOfFile: (NSHomeDirectory() as NSString).appendingPathComponent(".sfai/env"), encoding: .utf8) {
