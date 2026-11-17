@@ -15,7 +15,8 @@
 | 1 | `unknown suite: public-gsm8k` 崩溃 | build_model 离线回退分支不含公开套件 | 公开套件离线用最小脚本模型（冒烟），真实跑走 provider | `public_suites` 4 测试 |
 | 2 | BenchSpec 反序列化失败 / 构造器缺字段 | 新增 ground_truth_kind/files 字段 | serde default + 4 个合成构造器补字段 | 编译 + lib 测试 |
 | 3 | SpreadsheetBench 数据拉取失败 | GitHub 大文件与 HF API 全部网络不可达（http=000，三轮重试） | 记录为"就绪待数据"（loader 已备）；GSM8K/HumanEval 两套已满足"构建一个"要求 | 文档注明 |
-| 4 | E9 HumanEval 首跑 27 运行失败 | 夜间网络故障（连接重置/超时，非框架缺陷） | 作废首跑、白天重跑归档（e9-public-humaneval-rerun.json） | 重跑对比 |
+| 4 | E9 HumanEval 首跑 27 运行失败 | 夜间网络故障（连接重置/超时，非框架缺陷） | 作废首跑 | — |
+| 6 | HumanEval 重跑 37/40 失败（DNS 解析全面故障） | 本机网络/DNS 中断（与 SpreadsheetBench 拉取失败同源） | 作废重跑、如实归档；测量待网络恢复，任务集已交付 | 数据纪律 |
 | 5 | GSM8K 答案格式歧义（1,234 / 3/4） | 字符串匹配歧义 | 只取整数答案题 + 剥离千分位 | tasks.json 口径注明 |
 
 ## 3. 验证
@@ -24,7 +25,8 @@
   acceptance 型正确性、size cap）；clippy 0；fmt clean。
 - E9 GSM8K（干净）：有门 suc/cor 0.95、fs 0.00；无门 cor 0.70、fs 0.15
   ——**公开任务上门对照成立**。
-- E9 HumanEval：首跑网络污染作废；重跑数据归档后并入 T9。
+- E9 HumanEval：两次尝试（夜间超时/重置 + 上午 DNS 故障）均作废并归档；
+  任务集（20 题 + 官方测试）已冻结交付，测量待网络恢复。
 - 路由遥测：gsm8k 有门 loop-guard 40 次拦截（数学循环守卫实证）。
 
 ## 4. 遗留

@@ -13,12 +13,15 @@
 **公开任务上门对照成立**：无门时 15% 的"完成"是错答案静默交付；有门时全部正确或被拦。
 模型能力真实体现（0.95 数学正确率）。
 
-## HumanEval（20 题，首跑受网络污染 → 重跑为准）
+## HumanEval（20 题，测量受网络阻塞 —— 任务集已建成，测量待网络恢复）
 
-- 首跑（夜间）：27 次连接重置/超时（`timed out reading response` / `Connection reset`），
-  数字不可用——**作废**，以 `e9-public-humaneval-rerun.json` 为准。
-- 代码任务的验证门价值更大：`code_tests_pass`（官方测试即独立裁判）是
-  acceptance 型正确性——模型无法自评蒙混。
+- 首跑（夜间）：27 次连接重置/超时 → **作废**；
+- 重跑（上午）：DNS 全面故障（`api.deepseek.com` 解析失败，37/40 运行失败）→ **作废**
+  （两次尝试均记录于 `e9-public-deepseek.json` / `e9-public-humaneval-rerun.json` 的
+  error 字段，零隐瞒）；
+- **任务集本身已交付**（20 题 + 官方测试随仓冻结）：`code_tests_pass`（测试即独立
+  裁判）是 acceptance 型正确性，模型无法自评蒙混——网络恢复后重跑即得数。
+- 复现入口已就绪：`bench --config experiments/configs/deepseek-e9-humaneval-rerun.json`。
 
 ## 路由遥测（意外收获）
 
@@ -28,6 +31,7 @@
 
 ## 结论
 
-1. **公开基准上门对照再次成立**（fs 0.15 → 0.00），与 18 模型合成套件结论一致；
-2. HumanEval 网络事故如实记录（27 运行作废、重跑归档）——数据纪律延续；
-3. 论文 §5.9 表格就绪（T9）。
+1. **公开基准上门对照成立**（GSM8K：fs 0.15 → 0.00，cor 0.95）——与 18 模型合成
+   套件结论一致，D&B"公开任务集"证据链闭合；
+2. HumanEval 测量受网络阻塞（两次事故如实归档），**任务集已交付、测量待恢复**；
+3. 论文 §5.9（T9）以 GSM8K 为主证据，HumanEval 标注"pending network"。
