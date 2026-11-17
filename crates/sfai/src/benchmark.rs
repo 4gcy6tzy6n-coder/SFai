@@ -103,6 +103,11 @@ pub struct BenchSpec {
     /// Workspace files seeded before the run (public benchmark data).
     #[serde(default)]
     pub files: std::collections::BTreeMap<String, String>,
+    /// Ground-truth files the agent must NOT overwrite (e.g. test harnesses).
+    /// Verification materializes these from their fixture version (P0 audit:
+    /// agents were observed rewriting test_solution.py — self-grading risk).
+    #[serde(default)]
+    pub protected_files: Vec<String>,
     #[serde(default)]
     pub seed: u64,
 }
@@ -291,6 +296,7 @@ pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSp
                 ground_truth_inverted: false,
                 ground_truth_kind: default_truth_kind(),
                 files: Default::default(),
+                protected_files: Vec::new(),
                 seed,
             })
             .collect(),
@@ -313,6 +319,7 @@ pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSp
                     ground_truth_inverted: false,
                     ground_truth_kind: default_truth_kind(),
                     files: Default::default(),
+                    protected_files: Vec::new(),
                     seed,
                 }
             })
@@ -335,6 +342,7 @@ pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSp
                     ground_truth_inverted: false,
                     ground_truth_kind: default_truth_kind(),
                     files: Default::default(),
+                    protected_files: Vec::new(),
                     seed,
                 }
             })
@@ -355,6 +363,7 @@ pub fn generate_tasks_seeded(suite: &str, size: usize, seed: u64) -> Vec<BenchSp
                 ground_truth_inverted: true,
                 ground_truth_kind: default_truth_kind(),
                 files: Default::default(),
+                protected_files: Vec::new(),
                 seed,
             })
             .collect(),
@@ -747,7 +756,7 @@ pub fn run_benchmark_full(
                             // independent judge; correctness == acceptance.
                             let acceptance = app
                                 .verifier
-                                .verify(&task.task_id, &spec.acceptance_rules)
+                                .verify_protected(&task.task_id, &spec.acceptance_rules, &spec.protected_files)
                                 .map(|results| {
                                     results
                                         .iter()
@@ -759,7 +768,7 @@ pub fn run_benchmark_full(
                         Ok(_) => {
                             let acceptance = app
                                 .verifier
-                                .verify(&task.task_id, &spec.acceptance_rules)
+                                .verify_protected(&task.task_id, &spec.acceptance_rules, &spec.protected_files)
                                 .map(|results| {
                                     results
                                         .iter()

@@ -49,14 +49,71 @@ impl VerificationEngine {
     }
 
     pub fn verify(&self, task_id: &str, criteria: &[String]) -> Result<Vec<VerificationResult>> {
+        self.verify_protected(task_id, criteria, &[])
+    }
+
+    /// Verify with protected fixture paths: when materializing the workspace for
+    /// code checks, protected files use their ORIGINAL fixture version so an
+    /// agent cannot rewrite ground-truth tests (benchmark integrity).
+    pub fn verify_protected(
+        &self,
+        task_id: &str,
+        criteria: &[String],
+        protected: &[String],
+    ) -> Result<Vec<VerificationResult>> {
         let mut results = Vec::new();
         for criterion in criteria {
-            results.push(self.verify_one(task_id, criterion)?);
+            results.push(self.verify_one_with(task_id, criterion, protected)?);
         }
         Ok(results)
     }
 
+    /// Materialize all task artifacts into the workspace dir (latest version,
+    /// except protected paths which take the fixture version).
+    fn materialize_workspace(
+        &self,
+        task_id: &str,
+        workspace: &std::path::Path,
+        protected: &[String],
+    ) -> Result<()> {
+        std::fs::create_dir_all(workspace)?;
+        for r in self.objects.artifact_refs_for_task(task_id)? {
+            // ref format: artifact://<id>@<version>
+            let id = r
+                .trim_start_matches("artifact://")
+                .split('@')
+                .next()
+                .unwrap_or("")
+                .to_string();
+            let Some(art) = self.objects.get_artifact(&id)? else { continue };
+            let use_fixture = protected.iter().any(|p| p == &art.path);
+            let art = if use_fixture {
+                self.objects
+                    .find_artifact_oldest(task_id, &art.path)?
+                    .unwrap_or(art)
+            } else {
+                art
+            };
+            let dest = workspace.join(&art.path);
+            if let Some(parent) = dest.parent() {
+                std::fs::create_dir_all(parent)?;
+            }
+            let bytes = self.objects.get_blob(&art.checksum)?;
+            std::fs::write(dest, bytes)?;
+        }
+        Ok(())
+    }
+
     fn verify_one(&self, task_id: &str, criterion: &str) -> Result<VerificationResult> {
+        self.verify_one_with(task_id, criterion, &[])
+    }
+
+    fn verify_one_with(
+        &self,
+        task_id: &str,
+        criterion: &str,
+        protected: &[String],
+    ) -> Result<VerificationResult> {
         let (name, arg) = match criterion.split_once(':') {
             Some((n, a)) => (n, a),
             None => (criterion, ""),
@@ -108,7 +165,7 @@ impl VerificationEngine {
                 }
             }
             "citations_resolve" => self.verify_citations(task_id, criterion),
-            "code_tests_pass" => self.verify_code_tests(task_id, criterion, arg),
+            "code_tests_pass" => self.verify_code_tests(task_id, criterion, arg, protected),
             "json_valid" => self.verify_json(task_id, criterion, arg),
             "no_placeholders" => self.verify_placeholders(task_id, criterion, arg),
             "artifact_contains" => self.verify_contains(task_id, criterion, arg),
@@ -181,6 +238,7 @@ impl VerificationEngine {
         task_id: &str,
         criterion: &str,
         command: &str,
+        protected: &[String],
     ) -> Result<VerificationResult> {
         let Some(base) = &self.workspace_base else {
             return Ok(VerificationResult {
@@ -201,7 +259,10 @@ impl VerificationEngine {
             });
         };
         let workspace = base.join(task_id);
-        std::fs::create_dir_all(&workspace)?;
+        // Materialize artifacts from the object store — the workspace dir is
+        // otherwise empty and `python3 test_solution.py` exits 2 (file missing),
+        // which silently zeroed every code-suite acceptance (P0 audit finding).
+        self.materialize_workspace(task_id, &workspace, protected)?;
         let (code, output) = run_sandboxed_command(command, &workspace, CODE_TEST_TIMEOUT)?;
         let target = format!("task://{task_id}/workspace@1");
         let snippet: String = output.chars().take(MAX_OUTPUT_CHARS).collect();

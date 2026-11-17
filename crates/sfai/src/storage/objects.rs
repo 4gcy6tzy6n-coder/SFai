@@ -166,6 +166,16 @@ impl ObjectStore {
         row.as_ref().map(row_to_artifact).transpose()
     }
 
+    /// Oldest (fixture) version of a path — verification materializes protected
+    /// files from this version so agents cannot overwrite ground-truth tests.
+    pub fn find_artifact_oldest(&self, task_id: &str, path: &str) -> Result<Option<Artifact>> {
+        let rows = self.db.query(
+            "SELECT * FROM artifacts WHERE task_id = ?1 AND path = ?2 ORDER BY version ASC LIMIT 1",
+            params![task_id, path],
+        )?;
+        rows.first().map(row_to_artifact).transpose()
+    }
+
     pub fn find_artifact_by_path(&self, task_id: &str, path: &str) -> Result<Option<Artifact>> {
         let row = self.db.query_one(
             "SELECT * FROM artifacts WHERE task_id = ?1 AND path = ?2
