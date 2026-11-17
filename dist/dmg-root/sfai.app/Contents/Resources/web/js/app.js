@@ -793,7 +793,13 @@
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", init);
+    document.addEventListener("DOMContentLoaded", function () {
+    init();
+    // 真实测评模式：启动即从 Decide-Act 运行时拉取能力/Skill 注册表。
+    if (window.SFAIStore && window.SFAIStore.refreshFromBackend) {
+      window.SFAIStore.refreshFromBackend();
+    }
+  });
   } else {
     init();
   }

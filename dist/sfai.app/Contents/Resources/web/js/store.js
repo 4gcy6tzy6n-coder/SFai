@@ -1,4 +1,4 @@
-/* Local state, persistence, and the demo decision loop. */
+/* Local state + persistence. Real runtime data only (Decide-Act backend). */
 (function () {
   "use strict";
 
@@ -7,8 +7,6 @@
   var KEY = "sfai.console.v2";
   var VALID_ROUTES = ["tasks", "trajectory", "context", "capabilities"];
   var listeners = [];
-  var timers = {};
-  var simToken = {};
   var verifyEvents = {};
   var memoryStore = {};
   var storageAvailable = true;
@@ -138,6 +136,29 @@
         if (window.console && window.console.error) window.console.error("sfai render failed", error);
       }
     });
+  }
+
+  async function refreshFromBackend() {
+    if (!(global.SFAIApi && global.SFAIApi.enabled())) return;
+    try {
+      var caps = await global.SFAIApi.json("GET", "/api/capabilities");
+      var skills = await global.SFAIApi.json("GET", "/api/skills");
+      state = Object.assign({}, state, {
+        capabilities: (caps.capabilities || []).map(function (c) {
+          var ops = (c.operations || []).map(function (o) {
+            return { id: o.id, description: o.description, risk: o.risk_class, sample: JSON.stringify(o.input_schema || {}) };
+          });
+          return {
+            id: c.id, name: c.id, description: c.description, risk: c.risk_class,
+            operations: ops, permissions: Object.keys(c.permissions || {})
+          };
+        }),
+        skills: (skills.skills || []).map(function (sk) {
+          return { id: sk.name, name: sk.name, description: sk.description, version: sk.version, active: false, files: [] };
+        })
+      });
+      commit();
+    } catch (e) { /* backend may still be booting */ }
   }
 
   function commit() {
@@ -275,26 +296,6 @@
 
   function setStatus(taskId, status, note) {
     updateTask(taskId, { status: status, statusNote: note });
-  }
-
-  function clearTimers(taskId) {
-    (timers[taskId] || []).forEach(function (timer) { window.clearTimeout(timer); });
-    timers[taskId] = [];
-  }
-
-  function newSim(taskId) {
-    clearTimers(taskId);
-    simToken[taskId] = (simToken[taskId] || 0) + 1;
-    return simToken[taskId];
-  }
-
-  function after(taskId, ms, fn) {
-    if (!timers[taskId]) timers[taskId] = [];
-    timers[taskId].push(window.setTimeout(fn, ms));
-  }
-
-  function isCurrent(taskId, token) {
-    return simToken[taskId] === token && !!getTask(taskId);
   }
 
   function pauseRunningEvents(taskId) {
@@ -532,239 +533,72 @@
     var task = getTask(taskId);
     var body = String(text || "").trim();
     if (!task || !body) return null;
-    if (global.SFAIApi && global.SFAIApi.enabled()) {
-      var realTurn = maxTurn(taskId) + 1;
-      pauseRunningEvents(taskId);
-      return realSend(taskId, body, realTurn);
+    if (!(global.SFAIApi && global.SFAIApi.enabled())) {
+      addEvent(taskId, {
+        kind: "SYSTEM",
+        turn: maxTurn(taskId) + 1,
+        title: "未连接真实运行时",
+        text: "真实测评模式：请在设置中配置 sfai serve 地址（如 http://127.0.0.1:8787）后重试。"
+      });
+      commit();
+      return task;
     }
-    var token = newSim(taskId);
-    pauseRunningEvents(taskId);
     var turn = maxTurn(taskId) + 1;
-    addEvent(taskId, {
-      kind: "USER",
-      turn: turn,
-      title: "补充目标",
-      text: body
-    });
-    var first = addEvent(taskId, {
-      kind: "ASSISTANT",
-      turn: turn,
-      intent: "discover",
-      status: "running",
-      title: "接收补充信息",
-      text: "正在把补充目标写入 resident context，并准备下一步检索。"
-    });
-    var nextStatus = task.pendingApprovalId ? "approval" : "active";
-    setStatus(taskId, nextStatus, "正在处理补充信息");
-    commit();
-
-    after(taskId, 650, function () {
-      if (!isCurrent(taskId, token)) return;
-      updateEvent(first.id, { status: "ok" });
-      addEvent(taskId, {
-        kind: "TOOL",
-        turn: turn,
-        tool: "capabilities.discover",
-        status: "ok",
-        duration: "81ms",
-        summary: "命中 4 个能力",
-        args: "{\"query\":\"补充目标\",\"limit\":6}",
-        result: "4 matches\n- context.search\n- context.read\n- verify.run\n- workspace.exec",
-        cost: 0.01
-      });
-      commit();
-    });
-
-    after(taskId, 1350, function () {
-      if (!isCurrent(taskId, token)) return;
-      addEvent(taskId, {
-        kind: "ASSISTANT",
-        turn: turn,
-        intent: "respond",
-        title: "演示模式在此停止",
-        text: "补充目标已写入本地事件账本。接入 Rust 运行时后，主模型会在这里自行选择 discover、retrieve、execute 或 verify；演示不会伪造模型结果。",
-        cost: 0.01
-      });
-      var current = getTask(taskId);
-      setStatus(taskId, current && current.pendingApprovalId ? "approval" : "active", "等待下一步决策");
-      commit();
-    });
-    return { turn: turn };
+    pauseRunningEvents(taskId);
+    return realSend(taskId, body, turn);
   }
 
   function approve(approvalId, mode) {
     var approval = getApproval(approvalId);
     if (!approval || approval.status !== "pending") return;
     var taskId = approval.taskId;
-    var task = getTask(taskId);
-    if (!task) return;
-    var token = newSim(taskId);
     var decidedAt = U.timeNow();
-
     updateApproval(approvalId, {
       status: "approved",
       decided: decidedAt,
       mode: mode === "always" ? "always" : "once"
     });
-    if (mode === "always") {
-      state = Object.assign({}, state, {
-        settings: Object.assign({}, state.settings, { approvalPolicy: "auto" })
-      });
-      applyPreferences();
-    }
-    updateTask(taskId, {
-      pendingApprovalId: null,
-      status: "active",
-      statusNote: "已批准，正在执行"
-    });
-    state.events.forEach(function (event) {
-      if (event.approvalId === approvalId) updateEvent(event.id, { status: "approved" });
-    });
-
-    var execution = addEvent(taskId, {
-      kind: "TOOL",
-      turn: maxTurn(taskId),
-      tool: "workspace.exec",
-      status: "running",
-      duration: "—",
-      summary: approval.command,
-      args: JSON.stringify({ command: approval.command, cwd: approval.scope, timeout_ms: 120000 }, null, 2),
-      result: "等待回执…",
-      cost: 0.04
+    addEvent(taskId, {
+      kind: "SYSTEM",
+      turn: maxTurn(taskId) + 1,
+      title: "审批决定 · " + (mode === "always" ? "始终允许" : "允许一次"),
+      text: "真实测评模式：执行授权由后端策略（--permissions）裁决，此决定已写入本地会话记录。"
     });
     commit();
-    U.toast(mode === "always" ? "已批准，并为高影响操作启用自动批准" : "已批准，开始模拟执行");
-
-    after(taskId, 900, function () {
-      if (!isCurrent(taskId, token)) return;
-      updateEvent(execution.id, {
-        status: "ok",
-        duration: "18.4s",
-        summary: "42 tests passed",
-        result: "test result: ok. 42 passed; 0 failed; 0 ignored\nfinished in 18.42s\nreceipt: workspace.exec · committed"
-      });
-      addEvent(taskId, {
-        kind: "ASSISTANT",
-        turn: maxTurn(taskId),
-        intent: "verify",
-        title: "测试通过，开始独立核验",
-        text: "执行回执已写入事件账本。现在运行确定性验收检查，确认 replay 状态与任务状态一致。",
-        cost: 0.01
-      });
-      var verificationRun = addEvent(taskId, {
-        kind: "TOOL",
-        turn: maxTurn(taskId),
-        tool: "verify.run",
-        status: "running",
-        duration: "—",
-        summary: "3 条验收规则",
-        args: "{\"target_refs\":[\"ctx_0c7d\",\"ctx_8f21\"],\"mode\":\"deterministic\"}",
-        result: "正在检查…",
-        cost: 0.01
-      });
-      verifyEvents[taskId] = verificationRun.id;
-      commit();
-    });
-
-    after(taskId, 1650, function () {
-      if (!isCurrent(taskId, token)) return;
-      var verifyId = verifyEvents[taskId];
-      if (verifyId) {
-        updateEvent(verifyId, {
-          status: "ok",
-          duration: "1.2s",
-          summary: "3/3 通过",
-          result: "verdict: pass\n- cargo test 全绿\n- replay 状态与任务状态一致\n- 失败时输出差异摘要"
-        });
-      }
-      var current = getTask(taskId);
-      if (!current) return;
-      var findings = current.acceptance.map(function (rule) {
-        return { label: rule.label, state: "pass" };
-      });
-      updateTask(taskId, {
-        acceptance: current.acceptance.map(function (rule) {
-          return Object.assign({}, rule, { state: "pass" });
-        }),
-        verification: { verdict: "pass", label: "3/3 通过", time: U.timeNow() },
-        status: "done",
-        statusNote: "核验通过，任务已归档"
-      });
-      addEvent(taskId, {
-        kind: "VERIFICATION",
-        turn: maxTurn(taskId),
-        verdict: "pass",
-        title: "核验通过",
-        text: "3/3 验收规则通过，任务可归档。",
-        findings: findings
-      });
-      commit();
-      U.toast("核验通过，任务已完成");
-    });
   }
 
   function deny(approvalId) {
     var approval = getApproval(approvalId);
     if (!approval || approval.status !== "pending") return;
     var taskId = approval.taskId;
-    updateApproval(approvalId, { status: "denied", decided: U.timeNow(), mode: "denied" });
-    updateTask(taskId, {
-      pendingApprovalId: null,
-      status: "blocked",
-      statusNote: "审批被拒绝，任务停在安全边界"
-    });
-    state.events.forEach(function (event) {
-      if (event.approvalId === approvalId) updateEvent(event.id, { status: "denied" });
-    });
+    updateApproval(approvalId, { status: "denied", decided: U.timeNow(), mode: "deny" });
     addEvent(taskId, {
-      kind: "ASSISTANT",
-      turn: maxTurn(taskId),
-      intent: "pause",
-      title: "拒绝已记录",
-      text: "高影响操作未执行。任务停在安全边界，你可以调整目标，或重新发起审批。"
+      kind: "SYSTEM",
+      turn: maxTurn(taskId) + 1,
+      title: "审批决定 · 拒绝",
+      text: "真实测评模式：拒绝决定已记录；外部高影响动作不会执行。"
     });
     commit();
-    U.toast("已拒绝，操作未执行");
   }
 
   function retryApproval(approvalId) {
     var approval = getApproval(approvalId);
     if (!approval) return;
     var taskId = approval.taskId;
-    var expires = new Date(Date.now() + 30 * 60 * 1000);
-    var expiresAt = String(expires.getHours()).padStart(2, "0") + ":" +
-      String(expires.getMinutes()).padStart(2, "0") + ":" +
-      String(expires.getSeconds()).padStart(2, "0");
-    updateApproval(approvalId, {
-      status: "pending",
-      requested: U.timeNow(),
-      expires: expiresAt,
-      decided: null,
-      mode: null
-    });
-    updateTask(taskId, {
-      pendingApprovalId: approvalId,
-      status: "approval",
-      statusNote: "等待高影响执行审批"
-    });
-    state.events.forEach(function (event) {
-      if (event.approvalId === approvalId) updateEvent(event.id, { status: "pending" });
-    });
+    updateApproval(approvalId, { status: "pending", decided: null, mode: null });
     addEvent(taskId, {
       kind: "SYSTEM",
-      turn: maxTurn(taskId),
-      title: "重新发起审批",
-      text: "审批请求已重新提交；未执行任何外部操作。"
+      turn: maxTurn(taskId) + 1,
+      title: "重新请求授权",
+      text: "真实测评模式：重新提交给运行时（请在后端使用 --permissions ask 以获得交互审批）。"
     });
     commit();
-    U.toast("审批请求已重新提交");
   }
 
   function togglePause(taskId) {
     var task = getTask(taskId);
     if (!task) return;
     clearTimers(taskId);
-    simToken[taskId] = (simToken[taskId] || 0) + 1;
     if (task.status === "paused") {
       setStatus(taskId, task.pendingApprovalId ? "approval" : "active", task.pendingApprovalId ? "等待高影响执行审批" : "任务已继续");
       addEvent(taskId, { kind: "SYSTEM", turn: maxTurn(taskId), title: "任务已继续", text: "未完成的步骤需要重新发起。" });
@@ -842,7 +676,6 @@
 
   function reset() {
     Object.keys(timers).forEach(function (taskId) { clearTimers(taskId); });
-    Object.keys(simToken).forEach(function (taskId) { simToken[taskId] += 1; });
     verifyEvents = {};
     removeRaw();
     state = null;
@@ -904,6 +737,7 @@
     setMobileInspector: setMobileInspector,
     toggleTheme: toggleTheme,
     setSettings: setSettings,
+    refreshFromBackend: refreshFromBackend,
     createTask: createTask,
     sendMessage: sendMessage,
     approve: approve,
