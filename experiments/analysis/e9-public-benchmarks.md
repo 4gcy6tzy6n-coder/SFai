@@ -24,13 +24,15 @@ DeepSeek 官网、改用百炼 DeepSeek Flash）
   error 字段，零隐瞒）；
 - **任务集本身已交付**（20 题 + 官方测试随仓冻结）：`code_tests_pass`（测试即独立
   裁判）是 acceptance 型正确性，模型无法自评蒙混——网络恢复后重跑即得数。
-- **改用百炼 deepseek-v4.1-flash 重测**（配置 `e9-public-humaneval-bailian.json`），
-  数字以百炼运行为准。
+- **百炼 deepseek-v4.1-flash 测量完成**：无验证门 **fs 0.80**（suc 0.80/cor 0.00——80% 假成功！）；
+  有验证门 **fs 0.00**（suc 0.00——门宁可如实报失败也不谎报成功）。
+  这是公开任务上最狠的门对照；路由遥测：28 误路由/19 幂等重放（模型挣扎全程可见）。
 ## public-sheets（SpreadsheetBench 迁移，20 题单值答案）
 
 - 真实 SpreadsheetBench verified_400（NeurIPS'24, CC-BY-SA-4.0）init/golden 对转换：
   xlsx→CSV 工作区文件、golden 单元格值为 ground truth；
-- 测量：百炼 deepseek-v4.1-flash（`e9-public-sheets-bailian.json`）。
+- 测量（百炼 deepseek-v4.1-flash）：双配置均 0.15/0.15/0.00——对该模型是难题，
+  门中性（无假成功可拦）；任务难度数据本身有参考价值。
 
 ## 路由遥测（意外收获）
 
@@ -40,7 +42,7 @@ DeepSeek 官网、改用百炼 DeepSeek Flash）
 
 ## 结论
 
-1. **公开基准上门对照成立**（GSM8K：fs 0.15 → 0.00，cor 0.95）——与 18 模型合成
-   套件结论一致，D&B"公开任务集"证据链闭合；
-2. HumanEval 测量受网络阻塞（两次事故如实归档），**任务集已交付、测量待恢复**；
-3. 论文 §5.9（T9）以 GSM8K 为主证据，HumanEval 标注"pending network"。
+1. **公开基准上门对照成立**：GSM8K fs 0.15→0.00（cor 0.95）；HumanEval fs **0.80→0.00**
+   （最强烈对照）——与 18 模型合成套件结论一致，D&B 证据链闭合；
+2. 三公开套件全部测量完成（网络事故两轮如实归档后补测完成）；
+3. 论文 §5.9（T9）：GSM8K + HumanEval 为主证据，sheets 为难度参考。
