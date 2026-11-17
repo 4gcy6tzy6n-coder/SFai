@@ -76,7 +76,7 @@
     var tasks = saved && Array.isArray(saved.tasks) && saved.tasks.length ? saved.tasks : seed.tasks;
     var activeId = saved && tasks.some(function (task) { return task.id === saved.activeTaskId; })
       ? saved.activeTaskId
-      : tasks[0].id;
+      : (tasks.length ? tasks[0].id : null);
     var route = saved && VALID_ROUTES.indexOf(saved.route) >= 0 ? saved.route : "tasks";
 
     state = {
