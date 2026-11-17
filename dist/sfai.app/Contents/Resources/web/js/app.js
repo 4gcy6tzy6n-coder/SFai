@@ -89,7 +89,7 @@
   function renderComposer(state, task) {
     if (!task) return;
     if (els.composerForm.dataset.taskId !== task.id) els.composerForm.dataset.taskId = task.id;
-    els.composerNote.textContent = "演示模式 · 审批：" + U.approvalPolicyLabel(state.settings.approvalPolicy);
+    els.composerNote.textContent = (window.SFAIApi && window.SFAIApi.enabled() ? "真实模式" : "未连接") + " · 审批：" + U.approvalPolicyLabel(state.settings.approvalPolicy);
     if (els.composerHint) {
       els.composerHint.textContent = state.settings.sendKey === "enter"
         ? "⇧↵ 换行 · ↵ 发送"
@@ -504,7 +504,7 @@
         clearComposer();
         pendingScroll = true;
         render();
-        U.toast("演示数据已重置");
+        U.toast("本地状态已重置");
         break;
       case "copy-id":
         copyInPlace(actionEl, id);

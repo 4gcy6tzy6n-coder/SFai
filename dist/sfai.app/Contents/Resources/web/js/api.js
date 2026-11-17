@@ -2,7 +2,7 @@
    Real mode activates when a backend base URL is configured:
    - desktop app injects window.__SFAI_BACKEND__
    - or settings.endpoint points at a running `sfai serve`.
-   All calls are optional-layer: without a backend the UI keeps its demo mode. */
+   Without a backend no requests are made and the UI reports 'not connected'. */
 (function (global) {
   "use strict";
 

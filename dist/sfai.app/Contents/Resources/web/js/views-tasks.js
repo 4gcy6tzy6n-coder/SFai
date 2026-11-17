@@ -83,7 +83,7 @@
         '<button class="btn" type="button" data-action="approve" data-id="' + U.escapeHtml(approval.id) + '" data-mode="always">始终允许</button>' +
         '<button class="btn btn--ghost" type="button" data-action="deny" data-id="' + U.escapeHtml(approval.id) + '">拒绝</button>' +
         "</div>" +
-        '<p class="approval-note">批准后将在演示工作区模拟执行，不会触碰真实文件。高影响操作仍由运行时策略复核。</p>';
+        '<p class="approval-note">批准后由 Decide-Act 运行时按策略执行；高影响操作需授权收据，全程写入事件账本。</p>';
     }
     return '<div class="approval' + stateClass + '" role="group" aria-labelledby="ap-title-' + U.escapeHtml(event.id) + '">' +
       '<div class="approval-head">' + header + '<span class="approval-id">' + U.escapeHtml(approval.id) + "</span></div>" +
@@ -161,7 +161,7 @@
         '<div class="composer-bar">' +
           '<div class="composer-tools">' +
             '<span class="composer-mode"><span class="dot dot--accent" aria-hidden="true"></span>' + U.escapeHtml(task.mode) + "</span>" +
-            '<span class="composer-hint">审批：' + policyLabel + " · 演示不会调用真实模型</span>" +
+            '<span class="composer-hint">审批：' + policyLabel + "</span>" +
           "</div>" +
           '<button class="btn btn--primary btn--sm composer-send" type="submit">' + icon("send") + "发送</button>" +
         "</div>" +
@@ -185,7 +185,7 @@
 
   views.renderTaskView = function (task, state) {
     if (!task) {
-      return '<div class="page"><div class="empty"><div class="empty-icon">' + icon("tasks") + "</div><h2>还没有任务</h2><p>新建一个目标，或者从左侧选择一个演示任务。</p>" +
+      return '<div class="page"><div class="empty"><div class="empty-icon">' + icon("tasks") + "</div><h2>还没有任务</h2><p>新建一个目标，开始真实测评。</p>" +
         '<div class="empty-actions"><button class="btn btn--primary" type="button" data-action="open-new-task">' + icon("plus") + "新建任务</button></div></div></div>";
     }
     var pauseLabel = task.status === "paused" ? "继续" : "暂停";

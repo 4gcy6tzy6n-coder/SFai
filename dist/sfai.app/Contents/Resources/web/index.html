@@ -77,7 +77,7 @@
       <div class="rail-foot">
         <div class="rail-runtime">
           <span class="dot dot--warn" aria-hidden="true"></span>
-          <span>本地演示</span>
+          <span>真实测评</span>
           <span class="mono">未连接运行时</span>
         </div>
         <button class="icon-btn" type="button" data-action="open-settings" data-tab="run" aria-label="设置">
@@ -126,7 +126,7 @@
           <form class="chat-composer" id="composer-form" data-task-id="">
             <textarea id="composer-input" name="message" rows="1" placeholder="描述下一步，或补充一条约束…"></textarea>
             <div class="chat-composer-bar">
-              <span class="composer-note" id="composer-note">演示模式 · 不会调用真实模型</span>
+              <span class="composer-note" id="composer-note">真实测评模式 · 连接 Decide-Act 运行时</span>
               <button class="btn btn--primary btn--sm composer-send" type="submit">
                 <span data-icon-slot="send" aria-hidden="true"></span>
                 <span>发送</span>
@@ -179,7 +179,7 @@
       </div>
 
       <footer class="settings-foot">
-        <span>本地演示 · 未连接运行时</span>
+        <span>真实测评 · 连接 Decide-Act 运行时</span>
         <span class="mono">sfai 0.5.0</span>
       </footer>
     </div>
@@ -233,7 +233,7 @@
         </details>
       </div>
       <footer class="dialog-foot">
-        <p class="dialog-note">演示模式：会话写入本地状态，不会调用真实模型。</p>
+        <p class="dialog-note">真实测评模式：会话与工具回执来自真实 Decide-Act 运行时。</p>
         <div class="dialog-actions">
           <button class="btn" type="button" data-close-dialog="new-chat-dialog">取消</button>
           <button class="btn btn--primary" type="submit">开始对话</button>

@@ -66,19 +66,19 @@
 		</data>
 		<key>Resources/web/index.html</key>
 		<data>
-		UsJ83xKMji8nwHKxV+nB1dmUsHI=
+		j2XJgiSBHODBBbl0KpDFgKGHQ3A=
 		</data>
 		<key>Resources/web/js/api.js</key>
 		<data>
-		daIMntcn7klxPMHjOukmCfUVZ6g=
+		pmdcVBzGVJl0fMQP6ItxPkKNZpY=
 		</data>
 		<key>Resources/web/js/app.js</key>
 		<data>
-		OMJWZvLm01CXJkt7YusHWlIBcSg=
+		dQoX/CO66PoA+LXObdLB7HN+1No=
 		</data>
 		<key>Resources/web/js/data.js</key>
 		<data>
-		bAuCMlYmrsDDypk1Pzz2N8p2oiI=
+		8W5KjtX+t4DvvQjdhRnlQoSDVaI=
 		</data>
 		<key>Resources/web/js/icons.js</key>
 		<data>
@@ -90,7 +90,7 @@
 		</data>
 		<key>Resources/web/js/store.js</key>
 		<data>
-		bSenTLhVYOkIi1XRMgfX7IO+M+I=
+		Agb2GLrasRkSQa4KT/467pc+zGg=
 		</data>
 		<key>Resources/web/js/util.js</key>
 		<data>
@@ -110,11 +110,11 @@
 		</data>
 		<key>Resources/web/js/views-settings.js</key>
 		<data>
-		NAZO3WS+1gaS9d00c7vMatEIQgI=
+		nqrX1l0WI5ljBFV9ckrkwNz6Nmw=
 		</data>
 		<key>Resources/web/js/views-tasks.js</key>
 		<data>
-		9tDgvc9+aT98QFTQmkx/8EEo9j0=
+		d27aPoX7iv1WUI3dJHqnx6FvXkQ=
 		</data>
 		<key>Resources/web/js/views-trajectory.js</key>
 		<data>
@@ -296,28 +296,28 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			RtmoEA/jLwRWNIfrm9NaBmgghj4/ctZ1jxeT3SXtq48=
+			HTJZ5Mx3UUUhcnzHQXAu9bCHle2Bw3vQ4nWt2BYRZLc=
 			</data>
 		</dict>
 		<key>Resources/web/js/api.js</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			fhin6a7T7KmYxqwgvus7K4oLxEyK+A/no2UKrnWj0Fc=
+			vak+w2pRwz32d/vrU6+fVMJeQ98L3fkqX363z4awRUU=
 			</data>
 		</dict>
 		<key>Resources/web/js/app.js</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			iRr+m7V4EGRkUkpOWPCKT0cArzxkA1jTxS0AKs7gKHE=
+			eyDSZNtNhw71HtpYIlNkcad5xwZBzK/xPPukMCWiCSw=
 			</data>
 		</dict>
 		<key>Resources/web/js/data.js</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			xmS1Yke6GK4yCkBuIgsjCJRSPocQF681WVdJ/eUVl1Q=
+			UYTeyR2zQVKVWsW48MzGKnPJE0KkhAdEsRY8QZlLnZ0=
 			</data>
 		</dict>
 		<key>Resources/web/js/icons.js</key>
@@ -338,7 +338,7 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			8rRmVaiYEjfi2qqcT8LvlSZV56Auwp1mV9ODffXUvas=
+			T170TNKfh+JGEuBb/jF7Dem8x02CoJLyiw977wIqkbY=
 			</data>
 		</dict>
 		<key>Resources/web/js/util.js</key>
@@ -373,14 +373,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			+T14zkzbHoheFzBTriEIdeO/2ZZl1hU8TC87cycgJKs=
+			bVatt5oxriHuqOtnURrm5frPryRn5Qm9fZ5DqhpxoDs=
 			</data>
 		</dict>
 		<key>Resources/web/js/views-tasks.js</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			VXh8oC8nyfSul6VckJCw/gt+vej5DS+KEtZH2nbsuU8=
+			aAxBcOfEkziYHMHlcoN14LgufDQg92cxpt/fEAS2Ffg=
 			</data>
 		</dict>
 		<key>Resources/web/js/views-trajectory.js</key>

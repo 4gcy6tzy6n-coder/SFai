@@ -138,7 +138,7 @@
           '<div class="settings-section-body">' +
             '<div class="field"><label class="field-label" for="settings-endpoint">Provider endpoint</label>' +
               '<input id="settings-endpoint" name="endpoint" type="url" value="' + U.escapeHtml(settings.endpoint) + '" placeholder="http://127.0.0.1:8787/v1" spellcheck="false" aria-describedby="settings-endpoint-hint settings-endpoint-error">' +
-              '<p class="field-hint" id="settings-endpoint-hint">指向 sfai serve（如 http://127.0.0.1:8787）。留空则为演示模式。</p>' +
+              '<p class="field-hint" id="settings-endpoint-hint">指向 sfai serve（如 http://127.0.0.1:8787）。未配置则无法发起真实测评。</p>' +
               '<p class="field-error" id="settings-endpoint-error" hidden></p></div>' +
             '<div class="field"><label class="field-label" for="settings-model">主模型</label><select id="settings-model" name="model">' +
               '<option value="deepseek-chat"' + (settings.model === "deepseek-chat" ? " selected" : "") + ">deepseek-chat</option>" +
@@ -189,11 +189,11 @@
           "</div>" +
         "</section>" +
         '<section class="settings-section settings-section--last">' +
-          '<div class="settings-section-head"><h3>数据</h3><p>当前内容只存在于本地演示工作区。</p></div>' +
+          '<div class="settings-section-head"><h3>数据</h3><p>真实数据来自 Decide-Act 运行时；本地仅缓存会话状态。</p></div>' +
           '<div class="settings-section-body">' +
-            '<div class="settings-reset-zone"><div><p class="field-label">演示数据</p><p class="field-hint">恢复初始会话、事件与审批状态。</p></div>' +
-              '<button class="btn btn--danger-ghost" type="button" data-action="reset-demo">重置演示数据</button></div>' +
-            '<div class="reset-confirm" id="reset-confirm" hidden><p>这会清除本地修改并恢复初始演示内容，无法撤销。</p>' +
+            '<div class="settings-reset-zone"><div><p class="field-label">本地状态</p><p class="field-hint">清除本地缓存的会话状态（不影响运行时数据）。</p></div>' +
+              '<button class="btn btn--danger-ghost" type="button" data-action="reset-demo">重置本地状态</button></div>' +
+            '<div class="reset-confirm" id="reset-confirm" hidden><p>这会清除本地缓存状态，无法撤销。</p>' +
               '<div class="dialog-actions"><button class="btn" type="button" data-action="cancel-reset">取消</button>' +
               '<button class="btn btn--danger" type="button" data-action="confirm-reset">确认重置</button></div></div>' +
           "</div>" +

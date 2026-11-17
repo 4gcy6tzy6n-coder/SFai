@@ -4,7 +4,7 @@
 
   var SFAI = (window.SFAI = window.SFAI || {});
   var U = SFAI.util;
-  var KEY = "sfai.console.v2";
+  var KEY = "sfai.console.state.v3";
   var VALID_ROUTES = ["tasks", "trajectory", "context", "capabilities"];
   var listeners = [];
   var verifyEvents = {};
@@ -523,7 +523,7 @@
       title: "任务已建立",
       text: (global.SFAIApi && global.SFAIApi.enabled())
         ? "目标与约束已固定在 resident context。真实模型已接入（Decide-Act 运行时）；发送下一步即可开始执行。"
-        : "目标与约束已固定在 resident context。演示模式不会调用真实模型；你可以在下方补充下一步。"
+        : "目标与约束已固定在 resident context。未连接真实运行时——请在设置中配置 sfai serve 地址后开始真实测评。"
     });
     commit();
     return task;
@@ -688,7 +688,7 @@
     if (!task) return null;
     var events = eventsFor(taskId);
     return {
-      schema: "sfai.trace.demo/v1",
+      schema: "sfai.trace/v2",
       exportedAt: new Date().toISOString(),
       workspace: state.meta.workspace,
       task: task,
