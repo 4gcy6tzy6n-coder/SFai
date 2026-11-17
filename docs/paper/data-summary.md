@@ -46,7 +46,9 @@
 | long-horizon | no_verification | 16 | 1.00 | 0.62 | **0.38** |
 | long-horizon | none | 16 | 0.94 | 1.00 | **0.00** |
 
-- false-success CI（Wilson）：no_verification **0.38 [0.18, 0.61]** → none **0.00 [0.00, 0.19]**（CI 不相交）
+- false-success CI（Wilson）：no_verification **0.38 [0.18, 0.61]** → none **0.00 [0.00, 0.19]**
+- **配对 McNemar 精确检验**（同任务配对）：pooled b=12/c=0 **p=0.000488**；18 模型 176 对 b=52/c=0 **p=4.4e-16**（详见 `docs/paper/stats-appendix.md`）
+- 注：Wilson CI 在 0.18–0.19 存在小幅重叠，『CI 不相交』的旧表述已废除；推断以配对检验为准
 - 门精度矩阵（Eval/gate）：捕获 **1.00**（全部模式）/ 误杀 **0.00**（零误杀）
 - ask_user 率：捏造压力下 **0.94**（真实自路由行为，两 provider 均复现）
 
@@ -133,6 +135,18 @@ sfai 对照（e7-sfai-headtohead）：dataset 0.83/0.83/0.00 · tool-use 1.00/1.
 | public-sheets | none | 20 | 0.15 | 0.15 | **0.00** | 7313 |
 
 亮点：**HumanEval 无门 fs 0.80 vs 有门 0.00**（80% 假成功被门归零——公开任务上最狠对照）；GSM8K 门对照成立（0.15→0.00，cor 0.95）；sheets 双 0.15 中性。
+
+## T10 — E10 等验证器对等实验（风险 #3 回应）
+
+| 臂 | 完成率 | 正确率 | fs/全部 | fs/声称成功 | 修复触发 |
+|---|---|---|---|---|---|
+| sfai（门+运行时） | 1.00 | 1.00 | 0.00 | 0.00 | 0 |
+| LangGraph 无门 | 0.83 | 0.83 | 0.00 | 0.00 | — |
+| LangGraph + 等验证器（2 轮） | 0.92 | 0.92 | 0.00 | 0.00 | 0 |
+
+结论：低错误任务上门不触发（0 修复）；有效验证是活性成分（收益随错误率放大）；
+Decide-Act 独特价值 = 运行时鲁棒性（12/12 vs 裸异常丢任务）+ 审计 + E8 适应性。
+详见 `experiments/analysis/e10-verifier-parity.md`。
 
 ## 评测基线（sfai eval）
 

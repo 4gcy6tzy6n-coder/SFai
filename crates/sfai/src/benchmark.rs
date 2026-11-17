@@ -21,7 +21,7 @@ use std::time::Instant;
 
 pub const BENCH_VERSION: &str = "0.2.1";
 pub const DEFAULT_SIZE: usize = 6;
-pub const SUITES: [&str; 7] = [
+pub const SUITES: [&str; 8] = [
     "tool-use",
     "dataset",
     "long-horizon",
@@ -29,6 +29,7 @@ pub const SUITES: [&str; 7] = [
     "public-gsm8k",
     "public-humaneval",
     "public-sheets",
+    "public-e10parity",
 ];
 /// Combined public benchmark task database (GSM8K + HumanEval subsets; see
 /// evals/public/README for sources and licenses).

@@ -1,0 +1,17 @@
+{
+  "name": "e10-parity-sfai",
+  "provider": "bailian",
+  "model": "deepseek-v4.1-flash",
+  "price_in": 0.0,
+  "price_out": 0.0,
+  "suites": [
+    "public-e10parity"
+  ],
+  "ablations": [
+    "none"
+  ],
+  "size": 12,
+  "repetitions": 1,
+  "seed": 0,
+  "note": "E10 parity: sfai arm (gate on, repair budget 2) vs LangGraph +/- equal verifier"
+}
