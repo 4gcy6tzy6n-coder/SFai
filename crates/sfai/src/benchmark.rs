@@ -776,7 +776,11 @@ pub fn run_benchmark_full(
                             // independent judge; correctness == acceptance.
                             let acceptance = app
                                 .verifier
-                                .verify_protected(&task.task_id, &spec.acceptance_rules, &spec.protected_files)
+                                .verify_protected(
+                                    &task.task_id,
+                                    &spec.acceptance_rules,
+                                    &spec.protected_files,
+                                )
                                 .map(|results| {
                                     results
                                         .iter()
@@ -788,7 +792,11 @@ pub fn run_benchmark_full(
                         Ok(_) => {
                             let acceptance = app
                                 .verifier
-                                .verify_protected(&task.task_id, &spec.acceptance_rules, &spec.protected_files)
+                                .verify_protected(
+                                    &task.task_id,
+                                    &spec.acceptance_rules,
+                                    &spec.protected_files,
+                                )
                                 .map(|results| {
                                     results
                                         .iter()

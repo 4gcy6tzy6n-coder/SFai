@@ -107,8 +107,7 @@ pub async fn serve_with_web(
     let state = Arc::new(ServerState::new(app, token, provider));
     let mut svc = router(state);
     if let Some(dir) = web_dir {
-        let files = tower_http::services::ServeDir::new(dir)
-            .append_index_html_on_directories(true);
+        let files = tower_http::services::ServeDir::new(dir).append_index_html_on_directories(true);
         svc = svc.fallback_service(files);
     }
     let listener = tokio::net::TcpListener::bind(addr).await?;

@@ -85,7 +85,9 @@ impl VerificationEngine {
                 .next()
                 .unwrap_or("")
                 .to_string();
-            let Some(art) = self.objects.get_artifact(&id)? else { continue };
+            let Some(art) = self.objects.get_artifact(&id)? else {
+                continue;
+            };
             let use_fixture = protected.iter().any(|p| p == &art.path);
             let art = if use_fixture {
                 self.objects

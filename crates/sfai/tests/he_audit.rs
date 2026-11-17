@@ -75,7 +75,12 @@ fn audit_humaneval_first_two_tasks() {
         let task_dir = audit_out.join(id);
         std::fs::create_dir_all(&task_dir).ok();
         let mut written: Vec<String> = Vec::new();
-        for path in ["solution.py", "test_solution.py", "answer.json", "report.md"] {
+        for path in [
+            "solution.py",
+            "test_solution.py",
+            "answer.json",
+            "report.md",
+        ] {
             if let Some(a) = app
                 .objects
                 .find_artifact_by_path(&task.task_id, path)
@@ -96,7 +101,10 @@ fn audit_humaneval_first_two_tasks() {
                     if op == "file.write" || op == "workspace.exec" {
                         println!(
                             "   [event] {op} preview={:?}",
-                            e.payload.get("result_preview").and_then(|p| p.as_str()).unwrap_or("")
+                            e.payload
+                                .get("result_preview")
+                                .and_then(|p| p.as_str())
+                                .unwrap_or("")
                         );
                     }
                 }
@@ -138,8 +146,14 @@ fn audit_humaneval_first_two_tasks() {
             println!(
                 ">> official harness: exit={} stdout={} stderr={}",
                 out.status.code().unwrap_or(-1),
-                String::from_utf8_lossy(&out.stdout).chars().take(400).collect::<String>(),
-                String::from_utf8_lossy(&out.stderr).chars().take(800).collect::<String>(),
+                String::from_utf8_lossy(&out.stdout)
+                    .chars()
+                    .take(400)
+                    .collect::<String>(),
+                String::from_utf8_lossy(&out.stderr)
+                    .chars()
+                    .take(800)
+                    .collect::<String>(),
             );
         } else {
             println!(
