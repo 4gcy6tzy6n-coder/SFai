@@ -386,6 +386,9 @@
         els.taskSearch.focus();
         break;
       case "open-settings":
+        if (window.SFAIStore && window.SFAIStore.refreshFromBackend) {
+          window.SFAIStore.refreshFromBackend();
+        }
         openSettings(actionEl.dataset.tab || "task");
         break;
       case "open-palette":
@@ -596,6 +599,7 @@
       var theme = form.querySelector('input[name="theme"]:checked');
       var settingsPayload = {
         endpoint: endpoint,
+        provider: form.elements.provider.value,
         model: form.elements.model.value,
         approvalPolicy: form.elements.approvalPolicy.value,
         theme: theme ? theme.value : "system",

@@ -129,22 +129,58 @@
     var timestamps = settings.timestamps !== false;
     var autoFollow = settings.autoFollow !== false;
 
+    // ---- real provider/model switching (from /api/providers when connected) ----
+    var PROVIDER_PRESETS = {
+      deepseek: { label: "DeepSeek", models: ["deepseek-chat", "deepseek-reasoner"] },
+      bailian: { label: "百炼（多模型）", models: ["deepseek-v4.1-flash", "qwen4-max", "qwen3.8-flash", "glm-5.3"] },
+      mimo: { label: "Xiaomi MiMo", models: ["mimo-v2.6-pro", "mimo-v2.6-flash"] },
+      qwen: { label: "Qwen（DashScope）", models: ["qwen-plus", "qwen-max"] },
+      custom: { label: "自定义 OpenAI 兼容", models: [] }
+    };
+    var live = (window.SFAIStore && window.SFAIStore.getState().providers) || [];
+    var currentProvider = settings.provider || "deepseek";
+    var preset = PROVIDER_PRESETS[currentProvider] || PROVIDER_PRESETS.deepseek;
+    var providerOptions = "";
+    var providerHint = "";
+    var modelPool = preset.models.slice();
+    if (live.length) {
+      providerOptions = live.map(function (p) {
+        return '<option value="' + U.escapeHtml(p.name) + '"' + (p.name === currentProvider ? " selected" : "") + ">" +
+          U.escapeHtml(p.name + " · " + (p.model || "")) + (p.configured ? " ✓" : "（未配置 key）") + "</option>";
+      }).join("");
+      var liveCurrent = live.find(function (p) { return p.name === currentProvider; });
+      providerHint = liveCurrent
+        ? "来自运行时 /api/providers · " + (liveCurrent.note || "")
+        : "来自运行时 /api/providers";
+      if (liveCurrent && liveCurrent.model) modelPool = [liveCurrent.model].concat(modelPool);
+    } else {
+      providerOptions = Object.keys(PROVIDER_PRESETS).map(function (key) {
+        return '<option value="' + key + '"' + (key === currentProvider ? " selected" : "") + ">" + PROVIDER_PRESETS[key].label + "</option>";
+      }).join("");
+      providerHint = "连接运行时后显示各 Provider 的配置状态。";
+    }
+    var modelOptions = Array.from(new Set(modelPool)).map(function (m) {
+      return '<option value="' + U.escapeHtml(m) + '">';
+    }).join("");
+
     return '<div class="settings-pane settings-pane--run">' +
       '<header class="settings-pane-head"><div><p class="eyebrow">SETTINGS</p><h2>运行与界面</h2>' +
         '<p class="settings-pane-goal">连接、审批与界面偏好只保存在本机。配置 endpoint（sfai serve 地址）后进入真实模式，向真实模型发起请求。</p></div></header>' +
       '<form id="settings-form" class="settings-form" novalidate>' +
         '<section class="settings-section">' +
-          '<div class="settings-section-head"><h3>连接</h3><p>Provider 地址与本次会话使用的主模型。</p></div>' +
+          '<div class="settings-section-head"><h3>连接</h3><p>真实接入：运行时地址、Provider 与模型切换。</p></div>' +
           '<div class="settings-section-body">' +
-            '<div class="field"><label class="field-label" for="settings-endpoint">Provider endpoint</label>' +
-              '<input id="settings-endpoint" name="endpoint" type="url" value="' + U.escapeHtml(settings.endpoint) + '" placeholder="http://127.0.0.1:8787/v1" spellcheck="false" aria-describedby="settings-endpoint-hint settings-endpoint-error">' +
-              '<p class="field-hint" id="settings-endpoint-hint">指向 sfai serve（如 http://127.0.0.1:8787）。未配置则无法发起真实测评。</p>' +
+            '<div class="field"><label class="field-label" for="settings-endpoint">运行时地址（sfai serve）</label>' +
+              '<input id="settings-endpoint" name="endpoint" type="url" value="' + U.escapeHtml(settings.endpoint) + '" placeholder="http://127.0.0.1:8787" spellcheck="false" aria-describedby="settings-endpoint-hint settings-endpoint-error">' +
+              '<p class="field-hint" id="settings-endpoint-hint">桌面 App 内置运行时可留空（自动注入）。指向任意 sfai serve 即可远程接入。</p>' +
               '<p class="field-error" id="settings-endpoint-error" hidden></p></div>' +
-            '<div class="field"><label class="field-label" for="settings-model">主模型</label><select id="settings-model" name="model">' +
-              '<option value="deepseek-chat"' + (settings.model === "deepseek-chat" ? " selected" : "") + ">deepseek-chat</option>" +
-              '<option value="deepseek-reasoner"' + (settings.model === "deepseek-reasoner" ? " selected" : "") + ">deepseek-reasoner</option>" +
-              '<option value="local-openai"' + (settings.model === "local-openai" ? " selected" : "") + ">local · OpenAI compatible</option>" +
-            "</select></div>" +
+            '<div class="field"><label class="field-label" for="settings-provider">Provider（可切换）</label>' +
+              '<select id="settings-provider" name="provider">' + providerOptions + "</select>" +
+              '<p class="field-hint" id="settings-provider-hint">' + providerHint + "</p></div>" +
+            '<div class="field"><label class="field-label" for="settings-model">模型（可切换）</label>' +
+              '<input id="settings-model" name="model" list="settings-model-list" value="' + U.escapeHtml(settings.model || "") + '" placeholder="deepseek-chat" spellcheck="false">' +
+              '<datalist id="settings-model-list">' + modelOptions + "</datalist>" +
+              '<p class="field-hint">按 Provider 预填默认模型；可输入该 Provider 的任意模型名（如 deepseek-v4.1-flash / qwen4-max / mimo-v2.6-pro）。</p></div>' +
           "</div>" +
         "</section>" +
         '<section class="settings-section">' +

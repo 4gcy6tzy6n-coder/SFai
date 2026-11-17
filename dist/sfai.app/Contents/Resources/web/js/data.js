@@ -14,6 +14,7 @@
     settings: {
       theme: "system",
       endpoint: "",
+      provider: "deepseek",
       model: "deepseek-chat",
       approvalPolicy: "ask",
       motion: "system",
@@ -29,7 +30,8 @@
     approvals: [],
     contextRefs: [],
     capabilities: [],
-    skills: []
+    skills: [],
+    providers: []
   };
 
   SFAI.seed = function () {

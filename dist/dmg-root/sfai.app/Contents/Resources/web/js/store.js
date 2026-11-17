@@ -143,7 +143,9 @@
     try {
       var caps = await global.SFAIApi.json("GET", "/api/capabilities");
       var skills = await global.SFAIApi.json("GET", "/api/skills");
+      var providers = await global.SFAIApi.json("GET", "/api/providers");
       state = Object.assign({}, state, {
+        providers: providers.providers || [],
         capabilities: (caps.capabilities || []).map(function (c) {
           var ops = (c.operations || []).map(function (o) {
             return { id: o.id, description: o.description, risk: o.risk_class, sample: JSON.stringify(o.input_schema || {}) };
@@ -435,7 +437,10 @@
         }, 500);
         var result;
         try {
-          result = await api.runTask(realId, {});
+          var runOpts = {};
+          if (state.settings.provider) runOpts.provider = state.settings.provider;
+          if (state.settings.model) runOpts.model = state.settings.model;
+          result = await api.runTask(realId, runOpts);
         } finally {
           window.clearInterval(poll);
         }
