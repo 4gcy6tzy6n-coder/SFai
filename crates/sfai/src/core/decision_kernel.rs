@@ -72,6 +72,11 @@ pub struct TaskRunResult {
     pub open_issues: Vec<Value>,
     /// Routing-quality report (plan §13.4): what the model routed to and how.
     pub routing: Value,
+    /// Y/C/A protocol (eval-protocol.md): C — the model attempted to claim
+    /// completion (a Respond/Finish intent was processed), independent of
+    /// whether the verification gate accepted it.
+    #[serde(default)]
+    pub claimed_completion: bool,
 }
 
 /// Per-run routing statistics — the router block's own telemetry.
@@ -106,6 +111,7 @@ impl TaskRunResult {
             cost: Value::Null,
             open_issues: Vec::new(),
             routing: Value::Null,
+            claimed_completion: false,
         }
     }
 
@@ -118,6 +124,7 @@ impl TaskRunResult {
             cost: Value::Null,
             open_issues: Vec::new(),
             routing: Value::Null,
+            claimed_completion: false,
         }
     }
 }
@@ -346,6 +353,7 @@ impl<'a> DecisionKernel<'a> {
                     let (done, result) = self.try_complete(task_id, &task, &intent)?;
                     if done {
                         let mut result = result.unwrap();
+                        result.claimed_completion = true;
                         result.steps = steps;
                         result.cost = self.cost_value();
                         result.routing = self.routing.as_value();
@@ -373,6 +381,7 @@ impl<'a> DecisionKernel<'a> {
                             routing: self.routing.as_value(),
                             ..TaskRunResult::blocked(task_id)
                         };
+                        result.claimed_completion = true; // reached only via a claim
                         result.answer = intent
                             .payload
                             .get("text")
@@ -515,6 +524,7 @@ impl<'a> DecisionKernel<'a> {
             cost: Value::Null,
             open_issues: Vec::new(),
             routing: self.routing.as_value(),
+            claimed_completion: false,
         }
     }
 

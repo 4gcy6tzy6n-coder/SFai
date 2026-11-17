@@ -128,6 +128,9 @@ pub struct BenchTaskResult {
     pub acceptance_passed: bool,
     pub correct: bool,
     pub false_success: bool,
+    /// Y/C/A: C — model claimed completion (Respond/Finish processed).
+    #[serde(default)]
+    pub claimed: bool,
     pub latency_ms: f64,
     pub input_tokens: u64,
     pub output_tokens: u64,
@@ -821,6 +824,10 @@ pub fn run_benchmark_full(
                         .map(|r| r.routing.clone())
                         .unwrap_or(Value::Null);
                     let rnum = |key: &str| routing.get(key).and_then(|v| v.as_u64()).unwrap_or(0);
+                    let claimed = result
+                        .as_ref()
+                        .map(|r| r.claimed_completion)
+                        .unwrap_or(false);
                     tasks.push(BenchTaskResult {
                         task_id: task.task_id.clone(),
                         spec_id: spec.id.clone(),
@@ -832,6 +839,7 @@ pub fn run_benchmark_full(
                         acceptance_passed,
                         correct,
                         false_success,
+                        claimed,
                         latency_ms,
                         input_tokens: num("input_tokens"),
                         output_tokens: num("output_tokens"),

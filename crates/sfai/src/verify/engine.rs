@@ -104,6 +104,7 @@ impl VerificationEngine {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn verify_one(&self, task_id: &str, criterion: &str) -> Result<VerificationResult> {
         self.verify_one_with(task_id, criterion, &[])
     }
