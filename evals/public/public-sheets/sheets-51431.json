@@ -1,0 +1,20 @@
+{
+ "id": "sheets-51431",
+ "suite": "public-sheets",
+ "goal": "Build a formula that can help me extract the first name from a string of names in a cell I'm aware of the TEXT TO COLUMNS function, but it's not always suitable for the dataset I'm working with. For example, I want the first full name listed in cell A2, which contains names separated by semicolons, to be displayed in cell B2. Full Name and separator example: \"name, name;\"\n\nAfter performing the task, write the value of cell B2 in sheet 'Sheet1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:Nizghi, Righat"
+ ],
+ "ground_truth": "Nizghi, Righat",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "Sheet1.csv": "Names:,Primary Provider\r\n\"Nizghi, Righat; Maher, Tammy; Ayer, Janet\",\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}

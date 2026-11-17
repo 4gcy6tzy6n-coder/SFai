@@ -1,0 +1,20 @@
+{
+ "id": "sheets-9726",
+ "suite": "public-sheets",
+ "goal": "How can I populate the 'Visit date' column in Table 2 with the date from the 'Visit date' column in Table 1 that is immediately prior to the 'Submission date' listed in Table 2 for each student? For example, if the 'Submission date' is 21-Jun-16, I need to retrieve the last 'Visit date' from Table 1 which would be 12-Jun-16. I attempted using an array formula {=INDEX(C2:C7,MATCH(TRUE,IF(H2=$A$2:$A$7,INDEX($C$2:$C$7<I2,0)),0))} to find the next smaller value, similar to how I calculate the next larger value, but it didn't work.\nINDEX(C2:C7,MATCH(TRUE,IF(H2=$A$2:$A$7,INDEX($C$2:$C$7<I2,0)),0))\n\nAfter performing the task, write the value of cell J2 in sheet 'Sheet1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:2016-06-12 00:00:00"
+ ],
+ "ground_truth": "2016-06-12 00:00:00",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "Sheet1.csv": "Student ID,Visit number,Visit date,,,,,Student ID,Submission date,Visit date\r\nA1253,1,2016-05-14 00:00:00,,,,,A1253,2016-06-21 00:00:00,2016-05-14 00:00:00\r\nA1253,2,2016-05-31 00:00:00,,,,,,,\r\nA1253,3,2016-06-12 00:00:00,,,,,,,\r\nA1253,4,2016-06-21 00:00:00,,,,,,,\r\nA1458,1,2016-04-30 00:00:00,,,,,,,\r\nA1458,2,2016-05-04 00:00:00,,,,,,,\r\n,,,,,,,,,\r\n,,,,,,,,,\r\n,,,,,,,,,\r\n,,,,,,,,,\r\n,,,,,,,,,\r\n,,,,,,,,,\r\n,,,,,,,,,\r\n,,,,,,,,,\r\n,,,,,,,,,\r\n,,,,,,,,,\r\n,,,,,,,,,\r\n,,4,,,,,,,\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}

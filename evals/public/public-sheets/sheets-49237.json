@@ -1,0 +1,20 @@
+{
+ "id": "sheets-49237",
+ "suite": "public-sheets",
+ "goal": "How can I add a period to a cell in Excel if there is a middle initial present, and leave it blank if there is no middle initial? The middle initial is obtained from the full name in cell E19 with first name in E5 and last name in E7. The extraction formula I'm using for the middle name is `=TRIM(MID(E19,LEN(E5)+1,LEN(E19)-LEN(E5&E7)))`, which gives the middle name in E9. Then I'm converting it to proper case with `=PROPER(E9)` in F10, and I'm taking the initial from that result with `=LEFT(F10)` in F7. If F7 contains an initial, I want to add a period after it. Otherwise, F7 should remain blank. Every formula I've tried results in a `#VALUE` error. What formula should I use to achieve this?\n\nAfter performing the task, write the value of cell F7 in sheet 'Sheet1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:G."
+ ],
+ "ground_truth": "G.",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "Sheet1.csv": ",2024-05-15 00:00:00,,,,,,,,,,\r\nSSN,123456789,,,,,Open AEW,,,,,\r\nAddress,\"Joe George Veteran\n8675309 Lane NE\nJenny, MN 12345\",,,,,,,,,,\r\nDate,,,,00:00:00,00:00:00,Download AEW/FY2021,,,,,\r\nDate,,,,Joe,,,,,,,\r\nAward,,,,Geor,Joe,Reopen AEW,,,,,\r\nAEW Date (Use DOC),,,,Veteran,G,,,,,,\r\nPOA,,,,,Veteran,\"21-22, 214\",,,,,\r\nType,,,,George,,,,,,,\r\nContention,,,,,George,Letter Data,,,,,\r\nLetter Name,,,,Joe George Veteran,,,,,,,\r\nVBMS-A Remarks,,,,\"Veteran, Joe George\",,Do Calculator,,,,,\r\nLetter Dates,#REF!,,,JGV,,,,,,,\r\nLetter Dates,,,,6789,, Do Letter,,,,,\r\nCalculator Name,,,,AEW Dated ,,,,,,,\r\nLetter Creator Name,,,,\"Grant, BEST PCLTRS \",,Save Letter/FY2021/PCLTR/Break,,,,,\r\nSecond AEW,,,,,,,,,,,\r\nContention,,,,Joe George Veteran,,Print Calculator/FY2021,,,,,\r\nVBMS-A Remarks,,,,Joe George Veteran,,,,,,,\r\n,,,,Joe George Veteran,,Upload Calculator,,,,,\r\n,,,,,,,,,,,\r\n,,,,,,Save Letter Creator/FY2021,,,,,\r\n,,,,,,,,,,,\r\n,,,,,,CEST Claim,,,,,\r\n,,,,,,,,,,,\r\n,,,,,,VBMS-A,,,,,\r\n,,,,,,,,,,,\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}

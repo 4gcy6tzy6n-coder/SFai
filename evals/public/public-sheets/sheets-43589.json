@@ -1,0 +1,20 @@
+{
+ "id": "sheets-43589",
+ "suite": "public-sheets",
+ "goal": "Calculate the number of days using Excel where I have a range of dates in a cell formatted as text, such as '2 to 5' to represent 'June 2 to June 5', which should count as 4 days. Is there a way to process these text-based date ranges to get the number of days between them?\n\nAfter performing the task, write the value of cell B2 in sheet 'Sheet1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:4"
+ ],
+ "ground_truth": "4",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "Sheet1.csv": "Count,No. of days\r\n2 to 5,\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}

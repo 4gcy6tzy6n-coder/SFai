@@ -1,0 +1,20 @@
+{
+ "id": "sheets-35747",
+ "suite": "public-sheets",
+ "goal": "How can I create a formula in cell M2 that counts the number of values within the range B2:J11 that are greater than 100, where the corresponding date in B1:J1 is greater than or equal to a start date in M1, less than an end date in N1, and where the Asset ID in column A2:A11 matches the Asset ID in L2? \nCount how many values in B2:J11 if:\nB2:J11 > 100\nB1:J1 >= M1\n\nAfter performing the task, write the value of cell M2 in sheet 'Sheet1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:5"
+ ],
+ "ground_truth": "5",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "Sheet1.csv": ",2023-01-01 00:00:00,2023-01-02 00:00:00,2023-01-03 00:00:00,2023-01-04 00:00:00,2023-01-05 00:00:00,2023-01-06 00:00:00,2023-01-07 00:00:00,2023-01-08 00:00:00,2023-01-09 00:00:00,,,2023-01-01 00:00:00,2023-01-07 00:00:00,,,,,,,,\r\nAsset 1,820,546,155,883,732,184,656,39,606,,Asset 5,,,,,,,,,,\r\nAsset 2,633,772,974,410,114,77,763,171,582,,,,,,,,,,,,\r\nAsset 3,935,828,437,769,168,110,677,953,379,,,,,,,,,,,,\r\nAsset 4,54,571,447,786,368,240,579,629,961,,,,,,,,,,,,\r\nAsset 5,59,110,125,474,908,881,891,232,248,,,,,,,,,,,,\r\nAsset 6,102,455,152,192,221,743,710,952,69,,,,,,,,,,,,\r\nAsset 7,106,930,534,728,996,212,345,773,364,,,,,,,,,,,,\r\nAsset 8,892,838,316,49,104,455,397,513,493,,,,,,,,,,,,\r\nAsset 9,379,545,411,77,175,491,425,391,786,,,,,,,,,,,,\r\nAsset 10,888,856,833,384,487,981,21,838,397,,,,,,,,,,,,\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}

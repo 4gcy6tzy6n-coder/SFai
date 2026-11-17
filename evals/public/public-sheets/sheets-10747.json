@@ -1,0 +1,20 @@
+{
+ "id": "sheets-10747",
+ "suite": "public-sheets",
+ "goal": "I've attached a file containing a basic table and another table showing only a portion of that basic data. I've also included a formula that is supposed to extract the desired part, but it isn't working, and I can't identify the mistake. Could you please help me understand where I've gone wrong with the formula?\nIF((@$A$3:$A$8=$I3)*(@$B$3:$B$8=$J3),C3,0). The correct formula should sum the net profit from the first table based on the year and share no values in cells I3 and J3. It should be placed into cell K6.\n\nAfter performing the task, write the value of cell K6 in sheet 'גיליון1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:-10600"
+ ],
+ "ground_truth": "-10600",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "גיליון1.csv": ",,,,,,,,The desirable table,,,\r\nYear,Share No,Net profit,Cash flow,Tax,Selling exp,,,Year,Share No,Net profit,Tax\r\n2013,101010,-5300,12000,2000,200,,,2012,101010,-10600,4000\r\n2012,101010,-10600,24000,4000,400,,,2013,202020,-4240,1600\r\n2011,101010,-11660,26400,4400,440,,,,,,\r\n2013,202020,-4240,9600,1600,160,,,The wrong formula,,0,\r\n2012,202020,-8480,19200,3200,320,,,,,,\r\n2011,202020,-9328,21120,3520,352,,,,,,\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}

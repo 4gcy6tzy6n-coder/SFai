@@ -1,0 +1,20 @@
+{
+ "id": "sheets-42181",
+ "suite": "public-sheets",
+ "goal": "How can I modify my SUMIF function to sum values in column B only if the corresponding cells in the reference column I contain specific text, which is present in cell A13, but do not contain any numbers? I am already using an array formula to calculate the sum for numbers extracted from column I, however, I also need to sum up the numbers in column B if the corresponding cell in column I includes the text in A13 along with other text but excludes any numbers. Apply it.\nMy current formula is:  SUMIF($I$4:$I$10,\"*\"&A13&\"*\",$B$4:$B$10)\n\nAfter performing the task, write the value of cell B13 in sheet 'Sheet1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:4"
+ ],
+ "ground_truth": "4",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "Sheet1.csv": ",,,,,,,,\r\n,,,,,,,,\r\nNAME,Base Unit,,,,,,,Notes\r\n\"Doe, Jane\",2,,,,0,,,Note (blah blah blah)\r\n\"Doe, John\",3,,0,,0,,,1 Note\r\n\"Do, Adeer\",4,,0,,0,,,\r\n\"Re, Sunnie\",2,,,,0,,,Note\r\n\"Mi, Aname\",3,,0,,0,,,2 Notes\r\n\"Fa, Long\",4,,0,,0,,,\r\n,,,0,,0,,,\r\nTOTALS,18,,,,,,,\r\n,,,,,,,,\r\nNote,10,,,,,,,\r\nPartial Note,3,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n,,,,,,,,\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}

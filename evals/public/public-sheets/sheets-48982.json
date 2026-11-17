@@ -1,0 +1,20 @@
+{
+ "id": "sheets-48982",
+ "suite": "public-sheets",
+ "goal": "Why does the formula max.number in cell B323 not return the maximum+1 but shows 000, and why does it result in a circular reference error? The formula I'm using is =IF(A323=\"E\",\"\",MAX(B$7:B377)+1). If I press the formula in B323 using F9 key, it shows 606.\n\nAfter performing the task, write the value of cell B323 in sheet 'Sheet1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:606"
+ ],
+ "ground_truth": "606",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "Sheet1.csv": ",\r\n,\r\n,\r\n,\r\n,Check #\r\n,\r\n,417\r\n,418\r\n,\r\n,419\r\n,420\r\n,\r\n,421\r\n,422\r\n,423\r\n,424\r\n,\r\n,425\r\n,426\r\n,\r\n,427\r\n,428\r\n,\r\n,\r\n,429\r\n,430\r\n,431\r\n,432\r\n,433\r\n,434\r\n,\r\n,435\r\n,436\r\n,\r\n,437\r\n,438\r\n,439\r\n,440\r\n,441\r\n,\r\n,\r\n,442\r\n,443\r\n,444\r\n,445\r\n,446\r\n,447\r\n,448\r\n,\r\n,449\r\n,\r\n,450\r\n,451\r\n,\r\n,451\r\n,452\r\n,453\r\n,\r\n,454\r\n,\r\n,\r\n,\r\n,455\r\n,456\r\n,457\r\n,458\r\n,459\r\n,460\r\n,461\r\n,\r\n,462\r\n,463\r\n,464\r\n,\r\n,465\r\n,466\r\n,\r\n,\r\n,\r\n,467\r\n,468\r\n,\r\n,\r\n,469\r\n,470\r\n,\r\n,471\r\n,472\r\n,\r\n,473\r\n,474\r\n,475\r\n,476\r\n,477\r\n,\r\n,478\r\n,479\r\n,480\r\n,\r\n,481\r\n,\r\n,482\r\n,\r\n,483\r\n,484\r\n,\r\n,\r\n,485\r\n,486\r\n,\r\n,487\r\n,488\r\n,\r\n,489\r\n,490\r\n,491\r\n,\r\n,492\r\n,\r\n,\r\n,493\r\n,\r\n,\r\n,494\r\n,495\r\n,\r\n,496\r\n,497\r\n,498\r\n,\r\n,\r\n,499\r\n,500\r\n,\r\n,501\r\n,\r\n,\r\n,502\r\n,\r\n,503\r\n,\r\n,\r\n,\r\n,504\r\n,505\r\n,506\r\n,507\r\n,508\r\n,\r\n,509\r\n,\r\n,510\r\n,\r\n,511\r\n,512\r\n,\r\n,513\r\n,514\r\n,515\r\n,\r\n,\r\n,\r\n,516\r\n,517\r\n,518\r\n,519\r\n,520\r\n,521\r\n,522\r\n,\r\n,\r\n,523\r\n,524\r\n,525\r\n,526\r\n,527\r\n,\r\n,528\r\n,\r\n,\r\n,529\r\n,530\r\n,531\r\n,\r\n,532\r\n,533\r\n,534\r\n,\r\n,535\r\n,536\r\n,537\r\n,538\r\n,539\r\n,540\r\n,541\r\n,\r\n,542\r\n,543\r\n,544\r\n,545\r\n,\r\n,546\r\n,\r\n,\r\n,547\r\n,548\r\n,\r\n,\r\n,549\r\n,550\r\n,551\r\n,\r\n,552\r\n,553\r\n,554\r\n,\r\n,\r\n,\r\n,\r\n,555\r\n,556\r\n,557\r\n,558\r\n,559\r\n,\r\n,560\r\n,\r\n,\r\n,561\r\n,\r\n,\r\n,562\r\n,563\r\n,\r\n,564\r\n,565\r\n,566\r\n,567\r\n,\r\n,\r\n,\r\n,568\r\n,569\r\n,\r\n,\r\n,570\r\n,571\r\n,\r\n,572\r\n,573\r\n,574\r\n,\r\n,\r\n,575\r\n,576\r\n,\r\n,577\r\n,\r\n,\r\n,578\r\n,\r\n,579\r\n,580\r\n,\r\n,581\r\n,582\r\n,\r\n,\r\n,583\r\n,\r\n,\r\n,\r\n,\r\n,\r\n,584\r\n,585\r\n,586\r\n,\r\n,\r\n,\r\n,587\r\n,588\r\n,589\r\n,\r\n,\r\n,\r\n,\r\n,\r\n,\r\n,\r\n,\r\n,590\r\n,\r\n,\r\n,591\r\n,592\r\n,\r\n,593\r\n,\r\n,\r\n,594\r\n,595\r\n,\r\n,596\r\n,597\r\n,\r\n,\r\n,598\r\n,\r\n,\r\n,599\r\n,600\r\n,601\r\n,\r\nE,\r\n,602\r\n,603\r\nE,\r\n,604\r\n,605\r\n,\r\n,\r\n,0\r\n,\r\n,\r\n,\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}

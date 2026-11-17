@@ -1,0 +1,20 @@
+{
+ "id": "sheets-41691",
+ "suite": "public-sheets",
+ "goal": "Edit cell B:7 so that it is not #REF!.\n\nAfter performing the task, write the value of cell B7 in sheet 'Sheet1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:two"
+ ],
+ "ground_truth": "two",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "Sheet1.csv": "1,one\r\n2,two\r\n3,three\r\n4,four\r\n5,five\r\n,\r\n2,#REF!\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}

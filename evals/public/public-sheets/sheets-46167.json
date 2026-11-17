@@ -1,0 +1,20 @@
+{
+ "id": "sheets-46167",
+ "suite": "public-sheets",
+ "goal": "How can I create a formula in Excel that will calculate the sum of multiple cells subject to a specific criterion? Specifically, I want to sum the quantities (QTY) in a column for the rows where the 'PRODUCT ID' matches a given value (e.g., 111111). Please output the answer in D2. For example, the expected result of this sum for 'PRODUCT ID' 111111 should be 270, deriving from the individual QTY values of 50, 60, 70, and 90.        Sum of QTYs where PRODUCT ID=111111.\n\nAfter performing the task, write the value of cell D2 in sheet 'Sheet1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:270"
+ ],
+ "ground_truth": "270",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "Sheet1.csv": "PRODUCT ID,QTY,,answer\r\n111111,50,,\r\n222222,22,,\r\n111111,60,,\r\n222222,22,,\r\n222222,22,,\r\n111111,70,,\r\n222222,22,,\r\n222222,22,,\r\n222222,22,,\r\n222222,22,,\r\n111111,90,,\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}

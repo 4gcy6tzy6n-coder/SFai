@@ -1,0 +1,20 @@
+{
+ "id": "sheets-37900",
+ "suite": "public-sheets",
+ "goal": "I need help with a formula in Excel that can automatically return a value based on the current day's date. Also, I have attached a workbook named 'sample10.xlsx' for reference.\n\nAfter performing the task, write the value of cell E5 in sheet 'Sheet1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:2000"
+ ],
+ "ground_truth": "2000",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "Sheet1.csv": ",,,,,,\r\n,,,,,,\r\n,,,,,,\r\nDate,Value,,Current Date,2025-10-24 00:00:00,,\r\n2024-01-01 00:00:00,1000,,Current Value,,,\r\n2024-02-01 00:00:00,3000,,,,,\r\n2024-03-01 00:00:00,4000,,,,,\r\n2024-04-01 00:00:00,6000,,,,,\r\n2024-05-01 00:00:00,8000,,,,,\r\n2024-06-01 00:00:00,10000,,,,,\r\n2024-07-01 00:00:00,5000,,,,,\r\n2024-08-01 00:00:00,6000,,,,,\r\n2024-09-01 00:00:00,4000,,,,,\r\n2024-10-01 00:00:00,5000,,,,,\r\n2024-11-01 00:00:00,3000,,,,,\r\n2024-12-01 00:00:00,2000,,,,,\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}

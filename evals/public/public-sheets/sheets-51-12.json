@@ -1,0 +1,20 @@
+{
+ "id": "sheets-51-12",
+ "suite": "public-sheets",
+ "goal": "How can I create a VBA code that will count the number of times a value in a range from A1 to M1 on an Excel sheet increases by at least 10% from a reference cell, beginning the count from A1 and restarting the counting process from the cell immediately right of each cell where a 10% increase is found, terminating the count before M1 if there is no further data, and display the count in cell B6? Additionally, I'm looking to include the ability to update the data range in the code, as the actual worksheet data range is L26 to SHA26.\n\nAfter performing the task, write the value of cell B6 in sheet 'Sheet1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:4"
+ ],
+ "ground_truth": "4",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "Sheet1.csv": "100,105,110,200,220,250,260,275,160,175,170,177,100\r\n,,1,,2,,,3,,,,4,\r\n,,,,,,,,,,,,\r\n,,,,,,,,,,,,\r\n,,,,,,,,,,,,\r\nAnswer:,,,,,,,,,,,,\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}

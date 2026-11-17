@@ -1,0 +1,20 @@
+{
+ "id": "sheets-49801",
+ "suite": "public-sheets",
+ "goal": "In Excel, combine the results of both the LEFT 2 characters of a cell and RIGHT 3 characters of another cell into a single cell. I have the value 'SL-BK56-OWWFST-0035' and I use '=LEFT(A1,2)'in Column B which returns 'SL', and I use '=RIGHT(A1,5)' which returns '-0035'. Please concatenate these two formulas into one to get the result 'SL-0035' in column C. Do not add any additional labels or examples. \n\nAfter performing the task, write the value of cell C1 in sheet 'Sheet1' to answer.json as {\"answer\": <value>}.",
+ "constraints": [
+  "The answer must be the exact cell value from the golden result."
+ ],
+ "acceptance_rules": [
+  "artifact_exists:answer.json",
+  "json_valid:answer.json",
+  "artifact_contains:answer.json:SL-0035"
+ ],
+ "ground_truth": "SL-0035",
+ "ground_truth_inverted": false,
+ "ground_truth_kind": "marker",
+ "files": {
+  "Sheet1.csv": "SL-BK56-OWWFST-0035,SL,-0035\r\n"
+ },
+ "source": "SpreadsheetBench (NeurIPS 2024, CC-BY-SA-4.0), verified_400"
+}
